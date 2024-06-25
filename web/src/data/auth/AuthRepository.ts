@@ -128,6 +128,13 @@ export const createAuthRepository = () => {
         delete (authData as any).info;
       });
     }
+
+    // 2024-06-26 有些用户账号已登录，但是创建时间丢失了
+    if (authData.value.profile) {
+      if (typeof authData.value.profile.createAt !== 'number') {
+        authData.value.profile = undefined;
+      }
+    }
   };
 
   const signUp = async (json: SignUpBody) => {
