@@ -1,11 +1,13 @@
-import { useLocalStorage } from '@vueuse/core';
 import { v4 as uuidv4 } from 'uuid';
+
+import { useLocalStorage } from '@/util';
 
 import { FavoredList } from './Favored';
 import { FavoredApi } from './FavoredApi';
+import { LSKey } from '../LocalStorage';
 
 export const createFavoredRepository = () => {
-  const favoreds = useLocalStorage<FavoredList>('favored', {
+  const favoreds = useLocalStorage<FavoredList>(LSKey.Favored, {
     web: [{ id: 'default', title: '默认收藏夹' }],
     wenku: [{ id: 'default', title: '默认收藏夹' }],
     local: [{ id: 'default', title: '默认收藏夹' }],
@@ -25,8 +27,8 @@ export const createFavoredRepository = () => {
     title: string,
   ) => {
     const specificFavoreds = favoreds.value[type];
-    if (specificFavoreds.length >= 10) {
-      throw new Error('收藏夹最多只能创建10个');
+    if (specificFavoreds.length >= 20) {
+      throw new Error('收藏夹最多只能创建20个');
     }
     let id: string;
     if (type === 'web') {

@@ -5,11 +5,9 @@ import infra.article.ArticleRepository
 import infra.comment.CommentRepository
 import infra.comment.Comment
 import infra.common.Page
-import infra.user.User
 import infra.user.UserOutline
 import infra.user.UserRole
 import io.ktor.resources.*
-import io.ktor.server.application.*
 import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
@@ -77,6 +75,13 @@ fun Route.routeComment() {
                         content = body.content,
                     )
                 }
+            }
+        }
+
+        delete<CommentRes.Id> { loc ->
+            val user = call.user()
+            call.tryRespond {
+                service.deleteComment(user = user, id = loc.id)
             }
         }
 
@@ -164,12 +169,13 @@ class CommentApi(
             }
     }
 
-    @Suppress("unused")
     suspend fun deleteComment(
         user: User,
         id: String,
     ) {
-        user.shouldBeAtLeast(UserRole.Admin)
+        if (!(user.role atLeast UserRole.Maintainer) && !commentRepo.isCommentCanRevoke(id = id, userId = user.id)) {
+            throwUnauthorized("只有评论作者才有权限删除")
+        }
         val isDeleted = commentRepo.deleteComment(id)
         if (!isDeleted) throwNotFound("评论不存在")
     }
@@ -180,6 +186,9 @@ class CommentApi(
         parent: String?,
         content: String,
     ) {
+        if (!site.startsWith("article-")) {
+            user.shouldBeOldAss()
+        }
         if (content.isBlank()) {
             throwBadRequest("回复内容不能为空")
         }
@@ -211,9 +220,7 @@ class CommentApi(
         id: String,
         hidden: Boolean,
     ) {
-        if (!(user.role atLeast UserRole.Admin) && !commentRepo.isCommentCreateBy(id = id, userId = user.id)) {
-            throwUnauthorized("只有评论作者才有权限隐藏")
-        }
+        user.shouldBeAtLeast(UserRole.Maintainer)
         val isUpdated = commentRepo.updateCommentHidden(
             id = id,
             hidden = hidden,

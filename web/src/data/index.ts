@@ -1,9 +1,9 @@
+import { createGlobalState } from '@vueuse/core';
 import { createCachedSegRepository } from './CachedSegRepository';
 import {
   ArticleRepository,
   CommentRepository,
   OperationRepository,
-  SakuraRepository,
   UserRepository,
   WebNovelRepository,
   WenkuNovelRepository,
@@ -17,12 +17,14 @@ import {
   createSettingRepository,
 } from './setting/SettingRepository';
 import {
+  createDraftRepository,
   createGptWorkspaceRepository,
   createReadPositionRepository,
   createRuleViewedRepository,
   createSakuraWorkspaceRepository,
   createWebSearchHistoryRepository,
   createWenkuSearchHistoryRepository,
+  createBlockUserCommentRepository,
 } from './stores';
 import {
   createAmazonRepository,
@@ -39,7 +41,7 @@ const lazy = <T>(factory: () => T) => {
   let value: T;
   const get = () => {
     if (value === undefined) {
-      value = factory();
+      value = createGlobalState(factory)();
     }
     return value;
   };
@@ -50,7 +52,7 @@ const lazyAsync = <T>(factory: () => Promise<T>) => {
   let value: Promise<T>;
   const get = async () => {
     if (value === undefined) {
-      value = factory();
+      value = createGlobalState(factory)();
     }
     return await value;
   };
@@ -62,6 +64,7 @@ export const Locator = {
   //
   cachedSegRepository: lazyAsync(createCachedSegRepository),
   //
+  draftRepository: lazy(createDraftRepository),
   ruleViewedRepository: lazy(createRuleViewedRepository),
   readPositionRepository: lazy(createReadPositionRepository),
   settingRepository: lazy(createSettingRepository),
@@ -80,7 +83,6 @@ export const Locator = {
   articleRepository: ArticleRepository,
   commentRepository: CommentRepository,
   operationRepository: OperationRepository,
-  sakuraRepository: SakuraRepository,
   userRepository: UserRepository,
   webNovelRepository: WebNovelRepository,
   wenkuNovelRepository: WenkuNovelRepository,
@@ -88,4 +90,5 @@ export const Locator = {
   authRepository: lazy(createAuthRepository),
   favoredRepository: lazy(createFavoredRepository),
   readHistoryRepository: lazy(createReadHistoryRepository),
+  blockUserCommentRepository: lazy(createBlockUserCommentRepository),
 };

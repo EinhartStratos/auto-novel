@@ -18,6 +18,8 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.datetime.Clock
 import kotlinx.serialization.Serializable
 import org.bson.types.ObjectId
+import kotlin.time.Duration.Companion.days
+import kotlin.time.Instant
 
 class CommentRepository(
     mongo: MongoClient,
@@ -77,7 +79,6 @@ class CommentRepository(
                                     Comment::hidden.field(),
                                     Comment::numReplies.field(),
                                     Comment::user.field() + "." + UserOutline::username.field(),
-                                    Comment::user.field() + "." + UserOutline::role.field(),
                                     Comment::createAt.field(),
                                 )
                             )
@@ -104,7 +105,7 @@ class CommentRepository(
         }
     }
 
-    suspend fun isCommentCreateBy(
+    suspend fun isCommentCanRevoke(
         id: String,
         userId: String,
     ): Boolean =
@@ -112,7 +113,8 @@ class CommentRepository(
             .countDocuments(
                 and(
                     eq(CommentDbModel::id.field(), ObjectId(id)),
-                    eq(CommentDbModel::user.field(), ObjectId(userId))
+                    eq(CommentDbModel::user.field(), ObjectId(userId)),
+                    gt(CommentDbModel::createAt.field(), Clock.System.now() - 1.days),
                 ),
                 CountOptions().limit(1),
             ) > 0

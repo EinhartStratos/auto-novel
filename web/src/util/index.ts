@@ -1,6 +1,6 @@
 import { get } from 'lodash-es';
 
-export const downloadFile = (filename: string, blob: Blob): void => {
+export const downloadFile = (filename: string, blob: Blob) => {
   const el = document.createElement('a');
   el.href = URL.createObjectURL(blob);
   el.target = '_blank';
@@ -46,9 +46,9 @@ export const safeJson = <T extends object>(text: string) => {
 
 export const delay = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
-    let timeout: number;
+    let timeout: number | null = null;
     const abortHandler = () => {
-      clearTimeout(timeout);
+      clearTimeout(timeout!);
       reject(new DOMException('Aborted', 'AbortError'));
     };
     timeout = window.setTimeout(() => {
@@ -124,20 +124,14 @@ export const parallelExec = async <T>(
 };
 
 export namespace RegexUtil {
-  export const hasEnglishChars = (str: string) => /[a-z]|[A-Z]/.test(str);
+  const englishChars = /[a-z]|[A-Z]/;
+  export const hasEnglishChars = (str: string) => /[\u4E00-\u9FAF]/.test(str);
 
   const hanzi = /[\u4E00-\u9FAF]/;
   export const hasHanzi = (str: string) => hanzi.test(str);
 
-  export const hasKanaChars = (str: string) =>
-    /[\u3041-\u3096]|[\u30A1-\u30FA]/.test(str);
-
-  // https://en.wikipedia.org/wiki/Hangul#Unicode
-  export const hasHangulChars = (str: string) =>
-    hangulSyllables.test(str) ||
-    hangulJamo.test(str) ||
-    hangulEnclosed.test(str) ||
-    hangulHalfWidth.test(str);
+  const kanaChars = /[\u3041-\u3096]|[\u30A1-\u30FA]/;
+  export const hasKanaChars = (str: string) => kanaChars.test(str);
 
   // U+1100–U+11FF: Hangul Jamo
   // U+3130–U+318F: Hangul Compatibility Jamo
@@ -156,8 +150,46 @@ export namespace RegexUtil {
   // U+AC00–U+D7A3: Hangul Syllables
   const hangulSyllables = /[\uAC00-\uD7AF]/;
 
+  // https://en.wikipedia.org/wiki/Hangul#Unicode
+  export const hasHangulChars = (str: string) =>
+    hangulSyllables.test(str) ||
+    hangulJamo.test(str) ||
+    hangulEnclosed.test(str) ||
+    hangulHalfWidth.test(str);
+
+  export const countLanguageCharacters = (str: string) => {
+    const countResult = { en: 0, ko: 0, jp: 0, zh: 0, total: str.length };
+    for (const c of str) {
+      if (hasKanaChars(c)) {
+        countResult.jp += 1;
+      } else if (hasHangulChars(c)) {
+        countResult.ko += 1;
+      } else if (hasHanzi(c)) {
+        countResult.zh += 1;
+      } else if (hasEnglishChars(c)) {
+        countResult.en += 1;
+      }
+    }
+    return countResult;
+  };
+
   export const getLeadingSpaces = (str: string) => str.match(/^\s*/)?.[0] ?? '';
 
   export const isSafari = (agent: string) =>
     /^((?!chrome|android).)*safari/i.test(agent);
 }
+
+export namespace Humanize {
+  const unit = (rawNum: number, units: string[], times: number) => {
+    const i = Math.floor(Math.log(rawNum) / Math.log(times));
+    const j = Math.max(Math.min(i, units.length), 0);
+    const fmtNum = (rawNum / Math.pow(times, j)).toFixed(2);
+    return `${fmtNum}${units[j]}`;
+  };
+
+  export const bytes = (rawNum: number) =>
+    unit(rawNum, ['B', 'KB', 'MB', 'GB', 'TB', 'PB'], 1024);
+}
+
+export * from './UseOpenCC';
+export * from './UseStorage';

@@ -1,14 +1,11 @@
 <script lang="ts" setup>
-import { ErrorOutlineOutlined } from '@vicons/material';
 import { useOsTheme } from 'naive-ui';
 import { useScroll } from '@vueuse/core';
 
-import { SakuraRepository } from '@/data/api';
 import { Locator } from '@/data';
 import { GenericNovelId } from '@/model/Common';
 import { WebNovelChapterDto } from '@/model/WebNovel';
 
-import { doAction } from '@/pages/util';
 import { buildParagraphs } from './BuildParagraphs';
 
 const props = defineProps<{
@@ -17,7 +14,6 @@ const props = defineProps<{
   chapter: WebNovelChapterDto;
 }>();
 
-const message = useMessage();
 const osThemeRef = useOsTheme();
 
 const paragraphs = computed(() => buildParagraphs(props.gnid, props.chapter));
@@ -43,70 +39,8 @@ onMounted(async () => {
   }
 });
 
-const createWebIncorrectCase = async (
-  index: number,
-  chapter: WebNovelChapterDto,
-) => {
-  if (props.gnid.type !== 'web') return;
-
-  const jp = chapter.paragraphs[index];
-  const zh = chapter.sakuraParagraphs!![index];
-
-  function truncateParagraphs(
-    paragraphsJp: string[],
-    paragraphsZh: string[],
-    maxLength: number,
-  ) {
-    const truncatedJp: string[] = [];
-    const truncatedZh: string[] = [];
-    let currentLength = 0;
-
-    for (let i = 0; i < paragraphsJp.length; i++) {
-      const pJp = paragraphsJp[i];
-      const pZh = paragraphsZh[i];
-      if (pJp.trim().length === 0 || pJp.startsWith('<图片>')) {
-        continue;
-      }
-      if (currentLength + pJp.length > maxLength) {
-        break;
-      }
-      currentLength += pJp.length;
-      truncatedJp.push(pJp);
-      truncatedZh.push(pZh);
-    }
-    return { jp: truncatedJp, zh: truncatedZh };
-  }
-
-  const { jp: contextJpBefore, zh: contextZhBefore } = truncateParagraphs(
-    chapter.paragraphs.slice(0, index).reverse(),
-    chapter.sakuraParagraphs!.slice(0, index).reverse(),
-    512 - jp.length,
-  );
-  const { jp: contextJpAfter, zh: contextZhAfter } = truncateParagraphs(
-    chapter.paragraphs.slice(index + 1, chapter.paragraphs.length),
-    chapter.sakuraParagraphs!.slice(index + 1, chapter.paragraphs.length),
-    512 - jp.length,
-  );
-
-  const contextJp = [...contextJpBefore.reverse(), jp, ...contextJpAfter];
-  const contextZh = [...contextZhBefore.reverse(), zh, ...contextZhAfter];
-
-  await doAction(
-    SakuraRepository.createWebIncorrectCase({
-      providerId: props.gnid.providerId,
-      novelId: props.gnid.novelId,
-      chapterId: props.chapterId,
-      jp,
-      zh,
-      contextJp,
-      contextZh,
-    }),
-    '提交',
-    message,
-  );
-};
-
 const { setting } = Locator.readerSettingRepository();
+
 const fontColor = computed(() => {
   const theme = setting.value.theme;
   if (theme.mode === 'custom') {
@@ -118,8 +52,16 @@ const fontColor = computed(() => {
     } else if (osThemeRef.value) {
       specificTheme = osThemeRef.value;
     }
-    return specificTheme === 'light' ? 'black' : 'white';
+    return specificTheme === 'light' ? '#000000' : '#FFFFFF';
   }
+});
+
+const underlineColor = computed(() => `${fontColor.value}80`);
+
+const textUnderlineOffset = computed(() => {
+  const fontSize = setting.value.fontSize;
+  const offset = Math.round(fontSize / 4);
+  return `${offset}px`;
 });
 </script>
 
@@ -129,30 +71,16 @@ const fontColor = computed(() => {
       v-for="(p, index) of paragraphs"
       :key="`${chapter.prevId}/${index}`"
     >
-      <n-p
-        v-if="p && 'text' in p"
-        :class="{ secondary: p.secondary }"
-        :aria-hidden="!p.needSpeak"
-      >
-        {{ p.text }}
-        <n-popconfirm
-          v-if="p.popover !== undefined"
-          :show-icon="false"
-          placement="top-start"
-          positive-text="提交"
-          :negative-text="null"
-          @positive-click="createWebIncorrectCase(p.popover, chapter)"
-        >
-          <template #trigger>
-            <c-button
-              text
-              style="opacity: 0.5"
-              :icon="ErrorOutlineOutlined"
-              @action="(e: MouseEvent) => e.stopPropagation()"
-            />
-          </template>
-          这段话翻得不准确？
-        </n-popconfirm>
+      <n-p v-if="p && 'text' in p" :aria-hidden="!p.needSpeak">
+        <span v-if="setting.enableSourceLabel && p.source" class="source">
+          {{ p.source }}
+        </span>
+        <span v-if="!setting.trimLeadingSpaces">
+          {{ p.indent }}
+        </span>
+        <span :class="[p.secondary ? 'second' : 'first', 'text-content']">
+          {{ p.text }}
+        </span>
       </n-p>
       <br v-else-if="!p" />
       <img
@@ -175,9 +103,29 @@ const fontColor = computed(() => {
   font-size: v-bind('`${setting.fontSize}px`');
   margin: v-bind('`${setting.fontSize * setting.lineSpace}px 0`');
   color: v-bind('fontColor');
+}
+#chapter-content p .source {
+  display: inline-block;
+  user-select: none;
+  width: 1em;
+  text-align: center;
+  opacity: 0.4;
+  font-size: 0.75em;
+  margin-right: 0.5em;
+}
+#chapter-content p .first {
   opacity: v-bind('setting.mixZhOpacity');
 }
-#chapter-content .secondary {
+#chapter-content p .second {
   opacity: v-bind('setting.mixJpOpacity');
+}
+#chapter-content p .text-content {
+  text-decoration-line: v-bind(
+    "setting.textUnderline === 'none' ? 'none' : 'underline'"
+  );
+  text-decoration-style: v-bind('setting.textUnderline');
+  text-decoration-color: v-bind('underlineColor');
+  text-decoration-thickness: 1px;
+  text-underline-offset: v-bind('textUnderlineOffset');
 }
 </style>

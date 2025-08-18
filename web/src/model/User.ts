@@ -1,14 +1,13 @@
-export type UserRole = 'admin' | 'maintainer' | 'trusted' | 'normal' | 'banned';
+export type UserRole = 'admin' | 'trusted' | 'member' | 'restricted' | 'banned';
 
 export interface UserReference {
   username: string;
-  role: UserRole;
 }
 
 export interface UserOutline {
   id: string;
   email: string;
-  username: boolean;
+  username: string;
   role: UserRole;
-  createAt: number;
+  createdAt: number;
 }

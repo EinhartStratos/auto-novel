@@ -1,10 +1,10 @@
 package api
 
+import api.plugins.User
 import api.plugins.authenticateDb
 import api.plugins.user
 import infra.common.FavoredNovelListSort
 import infra.common.Page
-import infra.user.User
 import infra.user.UserFavored
 import infra.user.UserFavoredRepository
 import infra.wenku.WenkuNovelListItem
@@ -131,7 +131,7 @@ class UserFavoredWenkuApi(
         if (title.length > 20) throwBadRequest("收藏夹标题至多为20个字符")
 
         val (_, favoredWenku) = userFavoredRepo.getFavoredList(user.id)!!
-        if (favoredWenku.size >= 10) throwBadRequest("收藏夹最多只能创建10个")
+        if (favoredWenku.size >= 20) throwBadRequest("收藏夹最多只能创建20个")
 
         val newFavoredWenku = favoredWenku.toMutableList()
         val id = UUID.randomUUID().toString()
@@ -187,7 +187,7 @@ class UserFavoredWenkuApi(
         return favoredRepo
             .listFavoriteWenkuNovel(
                 userId = user.id,
-                favoredId = favoredId,
+                favoredId = favoredId.takeIf { it != "all" },
                 page = page,
                 pageSize = pageSize,
                 sort = sort,

@@ -4,8 +4,13 @@ import ky, { HTTPError, Options } from 'ky';
 import { parseEventStream, safeJson } from '@/util';
 
 export const createOpenAiRepository = (endpoint: string, key: string) => {
+  const endpointUrl = new URL(endpoint);
+  if (endpointUrl.pathname === '/') {
+    endpointUrl.pathname = 'v1';
+  }
+
   const client = ky.create({
-    prefixUrl: endpoint,
+    prefixUrl: endpointUrl.href,
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${key}`,
@@ -15,12 +20,15 @@ export const createOpenAiRepository = (endpoint: string, key: string) => {
     retry: 0,
   });
 
+  const listModels = (options?: Options): Promise<ModelsPage> =>
+    client.get('models', options).json<ModelsPage>();
+
   const createChatCompletionsStream = (
     json: ChatCompletion.Params & { stream: true },
     options?: Options,
   ): Promise<Generator<ChatCompletionChunk>> =>
     client
-      .post('v1/chat/completions', { json, ...options })
+      .post('chat/completions', { json, ...options })
       .text()
       .then(parseEventStream<ChatCompletionChunk>);
 
@@ -29,42 +37,28 @@ export const createOpenAiRepository = (endpoint: string, key: string) => {
     options?: Options,
   ): Promise<ChatCompletion> =>
     client
-      .post('v1/chat/completions', { json, ...options })
+      .post('chat/completions', { json, ...options })
       .json<ChatCompletion>();
 
-  // llamacpp特有
-  const llamacppCheck = (
-    json: {
-      prompt: string;
-      n_predict?: number;
-      temperature?: number;
-      top_k?: number;
-      top_p?: number;
-      repeat_penalty?: number;
-      frequency_penalty?: number;
-      n_probs?: number;
-      min_keep?: number;
-      seed?: number;
-    },
-    options?: Options,
-  ) =>
-    client.post('completion', { json, ...options }).json<{
-      completion_probabilities?: Array<{
-        content: string;
-        probs: Array<{
-          prob: number;
-          tok_str: string;
-        }>;
-      }>;
-      model: string;
-    }>();
-
   return {
+    listModels,
     createChatCompletionsStream,
     createChatCompletions,
-    llamacppCheck,
   };
 };
+
+interface ModelsPage {
+  object: 'list';
+  data: Model[];
+}
+
+interface Model {
+  id: string;
+  object: 'model';
+  created: number;
+  owned_by: string;
+  meta: unknown;
+}
 
 interface ChatCompletionChunk {
   id: string;
@@ -280,12 +274,13 @@ export class OpenAiError extends Error {
     this.code = code;
   }
 
-  static async handle(e: any): Promise<never> {
+  static async handle(e: unknown): Promise<never> {
     if (e instanceof HTTPError) {
       const errText = await e.response.text().catch((err) => {
         if (err instanceof Error) return err.message;
         return `${err}`;
       });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const errJson = safeJson<any>(errText);
       throw new OpenAiError(
         e.response.status,

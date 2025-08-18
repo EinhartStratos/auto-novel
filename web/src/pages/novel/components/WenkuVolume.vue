@@ -9,7 +9,7 @@ import {
   TranslateTaskParams,
 } from '@/model/Translator';
 import { VolumeJpDto } from '@/model/WenkuNovel';
-import TranslateTask from '@/pages/components/TranslateTask.vue';
+import TranslateTask from '@/components/TranslateTask.vue';
 
 const { novelId, volume, getParams } = defineProps<{
   novelId: string;
@@ -17,12 +17,14 @@ const { novelId, volume, getParams } = defineProps<{
   getParams: () => TranslateTaskParams;
 }>();
 
-const emit = defineEmits<{ delete: [] }>();
+const emit = defineEmits<{
+  delete: [];
+}>();
 
 const message = useMessage();
 
 const { setting } = Locator.settingRepository();
-const { atLeastMaintainer } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 
 const translateTask = ref<InstanceType<typeof TranslateTask>>();
 const startTranslateTask = (translatorId: 'baidu' | 'youdao') => {
@@ -114,21 +116,15 @@ const submitJob = (id: 'gpt' | 'sakura') => {
           secondary
           @action="submitJob('sakura')"
         />
-
-        <n-popconfirm
-          v-if="atLeastMaintainer"
-          :show-icon="false"
-          @positive-click="emit('delete')"
-          :negative-text="null"
-          style="max-width: 300px"
-        >
-          <template #trigger>
-            <c-button label="删除" type="error" size="tiny" secondary />
-          </template>
-          真的要删除吗？
-          <br />
-          {{ volume.volumeId }}
-        </n-popconfirm>
+        <c-button-confirm
+          v-if="whoami.asAdmin"
+          :hint="`真的要删除《${volume.volumeId}》吗？`"
+          label="删除"
+          type="error"
+          size="tiny"
+          secondary
+          @action="emit('delete')"
+        />
       </n-flex>
     </n-flex>
 

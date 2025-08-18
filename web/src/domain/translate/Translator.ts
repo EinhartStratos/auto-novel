@@ -47,7 +47,7 @@ export class Translator {
 
   sakuraModel() {
     if (this.segTranslator instanceof SakuraTranslator) {
-      return this.segTranslator.model ?? '未知';
+      return this.segTranslator.model?.id ?? '未知';
     } else {
       return '';
     }
@@ -69,12 +69,6 @@ export class Translator {
     },
   ): Promise<string[]> {
     const oldTextZh = context?.oldTextZh;
-    if (oldTextZh !== undefined && textJp.length !== oldTextZh.length) {
-      // hacky: 旧的文库小说行数存在不匹配，暂时停用行数不一致报错
-      oldTextZh === undefined;
-      // throw new Error('旧翻译行数不匹配。不应当出现，请反馈给站长。');
-    }
-
     const textZh = await emptyLineFilterWrapper(
       textJp,
       oldTextZh,
@@ -139,10 +133,11 @@ export class Translator {
     let cacheKey: string | undefined;
     if (this.segCache) {
       try {
-        let extra: any = { glossary };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const extra: any = { glossary };
         if (this.segTranslator instanceof SakuraTranslator) {
           extra.version = this.segTranslator.version;
-          extra.fingerprint = this.segTranslator.fingerprint;
+          extra.model = this.segTranslator.model;
         }
         cacheKey = this.segCache.cacheKey(seg, extra);
         const cachedSegOutput = await this.segCache.get(cacheKey);
@@ -159,7 +154,7 @@ export class Translator {
     // 翻译
     this.log(logPrefix);
     const segOutput = await this.segTranslator.translate(seg, {
-      glossary,
+      glossary: segGlossary,
       prevSegs,
       signal,
     });

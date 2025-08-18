@@ -7,7 +7,6 @@ import infra.common.Page
 import infra.common.TranslatorId
 import infra.oplog.Operation
 import infra.oplog.OperationHistoryRepository
-import infra.user.User
 import infra.user.UserRole
 import infra.wenku.*
 import infra.wenku.datasource.VolumeCreateException
@@ -17,17 +16,16 @@ import infra.wenku.repository.WenkuNovelVolumeRepository
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.resources.*
-import io.ktor.server.application.*
 import io.ktor.server.plugins.ratelimit.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
 import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.routing.*
+import io.ktor.utils.io.*
 import kotlinx.serialization.Serializable
 import org.bson.types.ObjectId
 import org.koin.ktor.ext.inject
-import java.io.InputStream
 
 @Resource("/wenku")
 private class WenkuNovelRes {
@@ -146,7 +144,7 @@ fun Route.routeWenkuNovel() {
                         user = user,
                         novelId = loc.parent.novelId,
                         volumeId = loc.volumeId,
-                        inputStream = filePart.streamProvider(),
+                        inputStream = filePart.provider(),
                         unpack = filePart.name == "jp",
                     )
                 }
@@ -217,7 +215,7 @@ fun Route.routeWenkuNovel() {
                 translations = loc.translations,
             )
             val encodedFilename = loc.filename.encodeURLParameter(spaceToPlus = true)
-            "../../../../../../${path}?filename=${encodedFilename}"
+            "/files-temp/wenku/${path.encodeURLParameter()}?filename=${encodedFilename}"
         }
     }
 }
@@ -360,6 +358,7 @@ class WenkuNovelApi(
         user: User,
         body: MetadataCreateBody,
     ): String {
+        user.shouldBeOldAss()
         val novelId = metadataRepo.create(
             title = body.title,
             titleZh = body.titleZh,
@@ -393,6 +392,7 @@ class WenkuNovelApi(
         novelId: String,
         body: MetadataCreateBody,
     ) {
+        user.shouldBeOldAss()
         val novel = metadataRepo.get(novelId)
             ?: throwNovelNotFound()
 
@@ -448,6 +448,7 @@ class WenkuNovelApi(
         novelId: String,
         glossary: Map<String, String>,
     ) {
+        user.shouldBeOldAss()
         val novel = metadataRepo.get(novelId)
             ?: throwNovelNotFound()
         if (glossary == novel.glossary)
@@ -475,7 +476,7 @@ class WenkuNovelApi(
         user: User,
         novelId: String,
         volumeId: String,
-        inputStream: InputStream,
+        inputStream: ByteReadChannel,
         unpack: Boolean,
     ): Int {
         validateNovelId(novelId)
@@ -540,15 +541,15 @@ class WenkuNovelApi(
         if (mode == NovelFileMode.Jp)
             throwBadRequest("不支持的类型")
 
-        val volume = volumeRepo.getVolume(novelId, volumeId)
-            ?: throwNotFound("卷不存在")
-
-        val newFileName = volume.makeTranslationVolumeFile(
+        val newFileName = volumeRepo.makeTranslationVolumeFile(
+            novelId = novelId,
+            volumeId = volumeId,
             mode = mode,
             translationsMode = translationsMode,
             translations = translations.distinct(),
-        )
-        return "files-wenku/${novelId}/${volumeId.encodeURLPathPart()}.unpack/$newFileName"
+        ) ?: throwNotFound("卷不存在")
+
+        return newFileName
     }
 }
 

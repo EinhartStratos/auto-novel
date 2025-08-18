@@ -1,132 +1,118 @@
 import { jwtDecode } from 'jwt-decode';
 
-import { UserRole } from '@/model/User';
-import { useLocalStorage } from '@vueuse/core';
-
 import { formatError } from '@/data/api';
 import { updateToken } from '@/data/api/client';
-import { AuthProfile } from './Auth';
-import { AuthApi, SignInBody, SignUpBody } from './AuthApi';
+import { UserRole } from '@/model/User';
+import { useLocalStorage } from '@/util';
 
-type AuthProfileFull = AuthProfile & {
-  token: string;
-  expireAt: number;
-};
-
-interface AuthData {
-  profile?: AuthProfileFull;
-  renewedAt?: number;
-  adminMode: boolean;
-}
+import { AuthApi } from './AuthApi';
+import { LSKey } from '../LocalStorage';
+import { AuthData, migrate } from './Auth';
 
 export const createAuthRepository = () => {
-  const authData = useLocalStorage<AuthData>('authInfo', {
+  const authData = useLocalStorage<AuthData>(LSKey.Auth, {
     profile: undefined,
-    renewedAt: undefined,
     adminMode: false,
   });
+  migrate(authData.value);
 
-  const profile = computed<AuthProfile | undefined>(
-    () => authData.value.profile,
-  );
+  const whoami = computed(() => {
+    const { profile, adminMode } = authData.value;
 
-  const isSignedIn = computed(() => profile.value !== undefined);
+    const isAdmin = profile?.role === 'admin';
+    const isSignedIn = profile !== undefined;
 
-  const createAtLeast = (days: number) => {
-    const createAt = authData.value.profile?.createAt;
-    if (!createAt) {
-      return false;
-    }
-    return Date.now() / 1000 - createAt > days * 24 * 3600;
-  };
+    const createAtLeast = (days: number) => {
+      if (!profile) return false;
+      return Date.now() / 1000 - profile.createdAt > days * 24 * 3600;
+    };
 
-  const createAtLeastOneMonth = computed(() => createAtLeast(30));
+    const buildRoleLabel = (auth: AuthData) => {
+      if (!auth.profile) return '';
 
-  const userRoleAtLeast = (role: UserRole) => {
-    const myRole = authData.value.profile?.role;
-    if (!myRole) {
-      return false;
-    }
-    const roleToNumber: Map<UserRole, number> = new Map([
-      ['admin', 4],
-      ['maintainer', 3],
-      ['trusted', 2],
-      ['normal', 1],
-      ['banned', 0],
-    ]);
-    return roleToNumber.get(myRole)! >= roleToNumber.get(role)!;
-  };
+      const roleToString = {
+        admin: '管理员',
+        trusted: '信任用户',
+        member: '普通用户',
+        restricted: '受限用户',
+        banned: '封禁用户',
+      };
+      return (
+        roleToString[auth.profile.role] ??
+        '未知用户' + (auth.adminMode ? '+' : '')
+      );
+    };
 
-  const atLeastAdmin = computed(() => userRoleAtLeast('admin'));
-  const atLeastMaintainer = computed(() => userRoleAtLeast('maintainer'));
-  const asAdmin = computed(
-    () => atLeastAdmin.value && authData.value.adminMode,
-  );
+    return {
+      user: {
+        username: profile?.username ?? '未登录',
+        role: buildRoleLabel(authData.value),
+        createAt: profile?.createdAt ?? Date.now() / 1000,
+      },
+      isSignedIn,
+      isAdmin,
+      asAdmin: isAdmin && adminMode,
+      allowNsfw: createAtLeast(30),
+      allowAdvancedFeatures: createAtLeast(30),
+      isMe: (username: string) => profile?.username === username,
+    };
+  });
 
-  const toggleAdminMode = () => {
+  const toggleManageMode = () => {
     authData.value.adminMode = !authData.value.adminMode;
   };
 
-  //
-  const setProfile = (token: string) => {
-    const { id, email, username, role, createAt, exp } = jwtDecode<{
-      id: string;
-      email: string;
-      username: string;
-      role: UserRole;
-      createAt: number;
-      exp: number;
-    }>(token);
-    const profile: AuthProfileFull = {
-      id,
-      email,
-      username,
-      role,
-      createAt,
-      token,
-      expireAt: exp,
-    };
-    authData.value.renewedAt = Date.now();
-    authData.value.profile = profile;
-  };
+  let refreshTimer: number | undefined = undefined;
 
-  const activateAuth = async () => {
-    // 检查是否过期
+  const refresh = () =>
+    AuthApi.refresh().then((token) => {
+      updateToken(token);
+      const { sub, exp, role, iat, crat } = jwtDecode<{
+        sub: string;
+        exp: number;
+        iat: number;
+        role: UserRole;
+        crat: number;
+      }>(token);
+      authData.value.profile = {
+        token,
+        username: sub,
+        role,
+        issuedAt: iat,
+        createdAt: crat,
+        expiredAt: exp,
+      };
+    });
+
+  const refreshIfNeeded = () => {
+    // 清空过期 Access Token
     if (
       authData.value.profile &&
-      Date.now() / 1000 > authData.value.profile.expireAt
+      Date.now() > authData.value.profile.expiredAt * 1000
     ) {
       authData.value.profile = undefined;
     }
 
-    // 订阅Token;
+    // 刷新 Access Token，冷却时间为1小时
+    const cooldown = 3600 * 1000;
+    const sinceIssuedAt = Date.now() - (authData.value.profile?.issuedAt ?? 0);
+    if (sinceIssuedAt < cooldown) {
+      return;
+    }
+    return refresh().catch(async (e) => {
+      console.warn('更新授权失败：' + (await formatError(e)));
+    });
+  };
+
+  const startRefreshAuth = () => {
     watch(
       () => authData.value.profile?.token,
       (token) => updateToken(token),
       { immediate: true },
     );
-
-    // 更新Token，冷却时间为24小时
-    const renewCooldown = 24 * 3600 * 1000;
-    if (authData.value.profile) {
-      const sinceLoggedIn = Date.now() - (authData.value.renewedAt ?? 0);
-      if (sinceLoggedIn > renewCooldown) {
-        AuthApi.renew()
-          .then((token) => setProfile(token))
-          .catch(async (e) => {
-            console.warn('更新授权失败：' + (await formatError(e)));
-          });
-      }
-    }
-
-    // 2024-06-21
-    if ((authData as any).info !== undefined) {
-      //  30天后可删除
-      updateToken((authData as any).info.token);
-      AuthApi.renew().then((token) => {
-        setProfile(token);
-        delete (authData as any).info;
-      });
+    refreshIfNeeded();
+    if (refreshTimer === undefined) {
+      refreshTimer = window.setInterval(refreshIfNeeded, 15 * 60 * 1000);
     }
 
     // 2024-06-26 有些用户账号已登录，但是创建时间丢失了
@@ -137,37 +123,18 @@ export const createAuthRepository = () => {
     }
   };
 
-  const signUp = async (json: SignUpBody) => {
-    const token = await AuthApi.signUp(json);
-    setProfile(token);
-  };
-  const signIn = async (json: SignInBody) => {
-    const token = await AuthApi.signIn(json);
-    setProfile(token);
-  };
-  const signOut = () => {
-    authData.value.profile = undefined;
+  const logout = () => {
+    updateToken();
+    return AuthApi.logout().then(() => {
+      authData.value.profile = undefined;
+    });
   };
 
   return {
-    profile,
-    isSignedIn,
-    //
-    createAtLeastOneMonth,
-    //
-    atLeastAdmin,
-    atLeastMaintainer,
-    asAdmin,
-    //
-    setProfile,
-    toggleAdminMode,
-    //
-    activateAuth,
-    signUp,
-    signIn,
-    signOut,
-    verifyEmail: AuthApi.verifyEmail,
-    sendResetPasswordEmail: AuthApi.sendResetPasswordEmail,
-    resetPassword: AuthApi.resetPassword,
+    whoami,
+    toggleManageMode,
+    refresh,
+    startRefreshAuth,
+    logout,
   };
 };

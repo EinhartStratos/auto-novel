@@ -122,33 +122,62 @@ export const useBookshelfLocalStore = defineStore('BookshelfLocal', {
         level,
         type,
         shouldTop,
+        startIndex,
+        endIndex,
+        taskNumber,
+        total,
       }: {
-        level: 'expire' | 'all';
+        level: 'expire' | 'all' | 'normal' | 'sync';
         type: 'gpt' | 'sakura';
         shouldTop: boolean;
+        startIndex: number;
+        endIndex: number;
+        taskNumber: number;
+        total: number;
       },
     ) {
       const workspace =
         type === 'gpt'
           ? Locator.gptWorkspaceRepository()
           : Locator.sakuraWorkspaceRepository();
-
-      const task = TranslateTaskDescriptor.local(id, {
-        level,
-        forceMetadata: false,
-        startIndex: 0,
-        endIndex: 65535,
-      });
-      const job = {
-        task,
-        description: id,
-        createAt: Date.now(),
-      };
-      const success = workspace.addJob(job);
-      if (success && shouldTop) {
-        workspace.topJob(job);
+      const tasks: string[] = [];
+      if (taskNumber > 1) {
+        const taskSize = (Math.min(endIndex, total) - startIndex) / taskNumber;
+        for (let i = 0; i < taskNumber; i++) {
+          const start = Math.round(startIndex + i * taskSize);
+          const end = Math.round(startIndex + (i + 1) * taskSize);
+          if (end > start) {
+            const task = TranslateTaskDescriptor.local(id, {
+              level,
+              forceMetadata: false,
+              startIndex: start,
+              endIndex: end,
+            });
+            tasks.push(task);
+          }
+        }
+      } else {
+        const task = TranslateTaskDescriptor.local(id, {
+          level,
+          forceMetadata: false,
+          startIndex: 0,
+          endIndex: 65535,
+        });
+        tasks.push(task);
       }
-      return success;
+      const results = tasks.map((task) => {
+        const job = {
+          task,
+          description: id,
+          createAt: Date.now(),
+        };
+        const success = workspace.addJob(job);
+        if (success && shouldTop) {
+          workspace.topJob(job);
+        }
+        return success;
+      });
+      return results;
     },
     queueJobsToWorkspace(
       ids: string[],
@@ -200,10 +229,12 @@ export namespace BookshelfLocalUtil {
     {
       query,
       enableRegexMode,
+      favoredId,
       order,
     }: {
       query: string;
       enableRegexMode: boolean;
+      favoredId?: string;
       order: {
         value: 'byCreateAt' | 'byReadAt' | 'byId';
         desc: boolean;
@@ -215,25 +246,27 @@ export namespace BookshelfLocalUtil {
       enableRegexMode,
     });
 
-    return volumes.sort((a, b) => {
-      let delta = 0;
-      switch (order.value) {
-        case 'byId':
-          delta = b.id.localeCompare(a.id);
-          break;
-        case 'byCreateAt': {
-          delta = a.createAt - b.createAt;
-          break;
+    return volumes
+      .filter((v) => favoredId === undefined || v.favoredId === favoredId)
+      .sort((a, b) => {
+        let delta = 0;
+        switch (order.value) {
+          case 'byId':
+            delta = b.id.localeCompare(a.id);
+            break;
+          case 'byCreateAt': {
+            delta = a.createAt - b.createAt;
+            break;
+          }
+          case 'byReadAt': {
+            delta = (a.readAt ?? 0) - (b.readAt ?? 0);
+            break;
+          }
+          default:
+            console.error(`未支持${order.value}排序`);
+            break;
         }
-        case 'byReadAt': {
-          delta = (a.readAt ?? 0) - (b.readAt ?? 0);
-          break;
-        }
-        default:
-          console.error(`未支持${order.value}排序`);
-          break;
-      }
-      return order.desc ? -delta : delta;
-    });
+        return order.desc ? -delta : delta;
+      });
   };
 }

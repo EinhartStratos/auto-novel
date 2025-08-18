@@ -16,7 +16,10 @@ const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 
-const { asAdmin } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
+const blockUserCommentRepository = Locator.blockUserCommentRepository();
+const isBlocked = (userName: string) =>
+  blockUserCommentRepository.ref.value.usernames.includes(userName);
 
 const articleCategoryOptions = [
   { value: 'General', label: '小说交流' },
@@ -143,17 +146,22 @@ const deleteArticle = (article: ArticleSimplified) =>
                 />
                 <c-a :to="`/forum/${article.id}`">
                   <n-text v-if="article.hidden" depth="3">[隐藏]</n-text>
-                  <b>{{ article.title }}</b>
+                  <n-text
+                    v-else-if="isBlocked(article.user.username)"
+                    depth="3"
+                  >
+                    [屏蔽]
+                  </n-text>
+                  <b v-else>{{ article.title }}</b>
                 </c-a>
               </n-flex>
               <n-text style="font-size: 12px">
-                {{
-                  article.updateAt === article.createAt ? '发布' : '更新'
-                }}于<n-time :time="article.updateAt * 1000" type="relative" />
+                {{ article.updateAt === article.createAt ? '发布' : '更新' }}于
+                <n-time :time="article.updateAt * 1000" type="relative" />
                 by {{ article.user.username }}
               </n-text>
 
-              <n-flex v-if="asAdmin" style="margin-top: 4px">
+              <n-flex v-if="whoami.asAdmin" style="margin-top: 4px">
                 <c-button
                   v-if="article.locked"
                   size="tiny"

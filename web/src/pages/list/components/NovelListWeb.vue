@@ -5,6 +5,19 @@ import { createReusableTemplate } from '@vueuse/core';
 import { WebNovelOutlineDto } from '@/model/WebNovel';
 import { WebUtil } from '@/util/web';
 
+import { Locator } from '@/data';
+const favoredRepository = Locator.favoredRepository();
+const { favoreds } = favoredRepository;
+const favoredTitleMap = computed(() => {
+  if (!favoreds.value?.web) {
+    return new Map<string, string>();
+  }
+  return favoreds.value.web.reduce((map, favored) => {
+    map.set(favored.id, favored.title);
+    return map;
+  }, new Map<string, string>());
+});
+
 const [DefineTag, ReuseTag] = createReusableTemplate<{
   tag: string;
   isAttention: boolean;
@@ -74,16 +87,12 @@ defineExpose({
   </DefineTag>
 
   <n-list>
-    <n-list-item v-for="item of items">
+    <n-list-item
+      v-for="item of items"
+      :key="`${item.providerId}/${item.novelId}`"
+    >
       <n-flex vertical :size="0">
         <c-a :to="`/novel/${item.providerId}/${item.novelId}`">
-          <n-text type="warning" v-if="item.favored">
-            <n-icon
-              :size="16"
-              :component="StarFilled"
-              style="margin-top: 4px"
-            />
-          </n-text>
           {{ item.titleJp }}
         </c-a>
 
@@ -105,13 +114,15 @@ defineExpose({
         <n-text v-if="!simple" depth="3">
           <ReuseTag
             v-for="attention in item.attentions.sort()"
+            :key="attention"
             :tag="attention"
-            :isAttention="true"
+            :is-attention="true"
           />
           <ReuseTag
             v-for="keyword in item.keywords"
+            :key="keyword"
             :tag="keyword"
-            :isAttention="false"
+            :is-attention="false"
           />
         </n-text>
 
@@ -122,11 +133,20 @@ defineExpose({
         </n-text>
 
         <n-text depth="3">
+          <template v-if="item.favored">
+            <n-text type="warning" v-if="item.favored">
+              <n-icon :size="10" :component="StarFilled" />
+            </n-text>
+            收藏于：{{ favoredTitleMap.get(item.favored) || '未知收藏夹' }} /
+          </template>
           <template v-if="item.updateAt">
-            本站更新于<n-time :time="item.updateAt * 1000" type="relative" /> /
+            本站更新于
+            <n-time :time="item.updateAt * 1000" type="relative" />
+            /
           </template>
           <template v-if="item.lastReadAt">
-            <n-time :time="item.lastReadAt * 1000" type="relative" />看过 /
+            <n-time :time="item.lastReadAt * 1000" type="relative" />
+            看过 /
           </template>
         </n-text>
       </n-flex>

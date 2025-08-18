@@ -3,35 +3,43 @@ import { UploadOutlined } from '@vicons/material';
 import { FormInst, FormItemRule, FormRules } from 'naive-ui';
 
 import { Locator } from '@/data';
-import avaterUrl from '@/image/avater.jpg';
 import { ArticleCategory } from '@/model/Article';
 
 import { doAction, useIsWideScreen } from '@/pages/util';
 import { useArticleStore } from './ForumArticleStore';
 
 const { articleId, category } = defineProps<{
-  articleId?: string;
-  category?: ArticleCategory;
+  articleId: string | undefined;
+  category: ArticleCategory | undefined;
 }>();
 
 const router = useRouter();
 const isWideScreen = useIsWideScreen();
 const message = useMessage();
 
+const { whoami } = Locator.authRepository();
+const draftRepo = Locator.draftRepository();
+const draftId = `article-${articleId ?? 'new'}`;
+
 const store = articleId !== undefined ? useArticleStore(articleId) : undefined;
 
-const articleCategoryOptions = [
-  { value: 'General', label: '小说交流' },
-  { value: 'Guide', label: '使用指南' },
-  { value: 'Support', label: '反馈与建议' },
-];
+const articleCategoryOptions = whoami.value.asAdmin
+  ? [
+      { value: 'General', label: '小说交流' },
+      { value: 'Guide', label: '使用指南' },
+      { value: 'Support', label: '反馈与建议' },
+    ]
+  : [
+      { value: 'General', label: '小说交流' },
+      { value: 'Support', label: '反馈与建议' },
+    ];
 
 const allowSubmit = ref(articleId === undefined);
 const formRef = ref<FormInst>();
 const formValue = ref({
   title: '',
   content: '',
-  category,
+  category: category ?? 'General',
 });
 const formRules: FormRules = {
   title: [
@@ -98,15 +106,17 @@ const submit = async () => {
 
   if (store === undefined) {
     await doAction(
-      Locator.articleRepository
-        .createArticle(formValue.value as any)
-        .then((id) => router.push({ path: `/forum/${id}` })),
+      Locator.articleRepository.createArticle(formValue.value).then((id) => {
+        draftRepo.removeDraft(draftId);
+        router.push({ path: `/forum/${id}` });
+      }),
       '发布',
       message,
     );
   } else {
     await doAction(
-      store.updateArticle(formValue.value as any).then(() => {
+      store.updateArticle(formValue.value).then(() => {
+        draftRepo.removeDraft(draftId);
         router.push({ path: `/forum/${articleId}` });
       }),
       '更新',
@@ -114,18 +124,6 @@ const submit = async () => {
     );
   }
 };
-
-const formatExample: [string, string][] = [
-  ['段落之间要有空行', '第一段巴拉巴拉\n\n第二段巴拉巴拉'],
-  ['粗体', '**随机文本**'],
-  ['斜体', '*随机文本*'],
-  ['删除线', '~~随机文本~~'],
-  ['分隔线', '---'],
-  ['列表', '- 第一项\n- 第二项\n- 第三项\n'],
-  ['链接', '[链接名称](https://books.fishhawk.top)'],
-  ['网络图片', `![](${avaterUrl})`],
-  ['多级标题', '# 一级标题\n\n## 二级标题\n\n### 三级标题'],
-];
 </script>
 
 <template>
@@ -154,14 +152,13 @@ const formatExample: [string, string][] = [
         />
       </n-form-item-row>
       <n-form-item-row path="content" label="正文">
-        <markdown-input
+        <MarkdownEditor
+          mode="article"
+          :draft-id="draftId"
           v-model:value="formValue.content"
-          type="textarea"
           placeholder="请输入正文"
           :autosize="{ minRows: 8 }"
           maxlength="20000"
-          show-count
-          :input-props="{ spellcheck: false }"
           style="width: 100%"
         />
       </n-form-item-row>
@@ -176,29 +173,5 @@ const formatExample: [string, string][] = [
       class="float"
       @action="submit"
     />
-
-    <n-divider />
-
-    <section-header title="格式帮助" />
-    <n-table :bordered="false">
-      <thead>
-        <tr>
-          <th><b>格式</b></th>
-          <th><b>原文</b></th>
-          <th><b>预览</b></th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="[name, code] of formatExample">
-          <td>
-            <b>{{ name }}</b>
-          </td>
-          <td style="white-space: pre-wrap">{{ code }}</td>
-          <td>
-            <Markdown :source="code" />
-          </td>
-        </tr>
-      </tbody>
-    </n-table>
   </div>
 </template>

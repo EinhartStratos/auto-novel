@@ -4,10 +4,12 @@ import { Result, runCatching } from '@/util/result';
 import { Page } from '@/model/Page';
 import { UserOutline, UserRole } from '@/model/User';
 
-const userRole = ref<UserRole>('normal');
+const userRole = ref<UserRole>('member');
 const userRoleOptions = [
-  { value: 'normal', label: '正常用户' },
-  { value: 'maintainer', label: '维护者' },
+  { value: 'member', label: '普通用户' },
+  { value: 'admin', label: '管理员' },
+  { value: 'trusted', label: '信任用户' },
+  { value: 'restricted', label: '受限用户' },
   { value: 'banned', label: '封禁用户' },
 ];
 
@@ -40,10 +42,10 @@ watch(userRole, () => {
 });
 
 const roleToReadableText = (role: UserRole) => {
-  if (role === 'normal') return '普通用户';
-  else if (role === 'trusted') return '信任用户';
-  else if (role === 'maintainer') return '维护者';
+  if (role === 'member') return '普通用户';
   else if (role === 'admin') return '管理员';
+  else if (role === 'trusted') return '信任用户';
+  else if (role === 'restricted') return '受限用户';
   else if (role === 'banned') return '封禁用户';
   else return '未知';
 };
@@ -70,16 +72,27 @@ const roleToReadableText = (role: UserRole) => {
     <n-table :bordered="false">
       <thead>
         <tr>
-          <th><b>用户名</b></th>
-          <th><b>邮箱</b></th>
+          <th style="width: 150px"><b>用户名</b></th>
+          <th style="width: 80px"><b>角色</b></th>
+          <th style="width: 150px"><b>邮箱</b></th>
+          <th style="width: 150px"><b>创建时间</b></th>
           <th><b>操作</b></th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="user in value.items" :key="user.id">
-          <td>{{ roleToReadableText(user.role) }}-{{ user.username }}</td>
+          <td>{{ user.username }}</td>
+          <td>{{ roleToReadableText(user.role) }}</td>
           <td>{{ user.email }}</td>
-          <td></td>
+          <td><n-time :time="user.createdAt * 1000" /></td>
+          <td>
+            <user-management-update-role
+              :id="user.id"
+              :username="user.username"
+              :role="user.role"
+              @update="loadPage(currentPage)"
+            />
+          </td>
         </tr>
       </tbody>
     </n-table>

@@ -160,11 +160,11 @@ class Syosetu(
             .selectFirst("h1")!!
             .text()
 
-        val infodataEl = doc2.getElementById("infodata")!!
-        val preInfoEl = infodataEl.getElementById("pre_info")!!
+        val infodataEl = doc2.getElementsByClass("p-infotop-data").first()!!
+        val infotypeEl = doc2.getElementsByClass("p-infotop-type").first()!!
 
         fun row(label: String) = infodataEl
-            .selectFirst("th:containsOwn(${label})")
+            .selectFirst("dt:containsOwn(${label})")
             ?.nextElementSibling()
 
         val author = row("作者名")!!
@@ -175,10 +175,7 @@ class Syosetu(
                 )
             }
 
-        val type = (
-                preInfoEl.selectFirst("#noveltype_notend")
-                    ?: preInfoEl.selectFirst("#noveltype")!!
-                )
+        val type = infotypeEl.selectFirst(".p-infotop-type__type")!!
             .text()
             .let {
                 when (it) {
@@ -201,8 +198,8 @@ class Syosetu(
                     else -> keywords.add(it)
                 }
             }
-        preInfoEl
-            .selectFirst("#age_limit")
+        infotypeEl
+            .selectFirst(".p-infotop-type__r18")
             ?.text()
             ?.let {
                 if (it == "R18") attentions.add(WebNovelAttention.R18)
@@ -222,7 +219,7 @@ class Syosetu(
         val introduction = row("あらすじ")!!
             .text()
 
-        val toc = if (doc1.selectFirst("div.index_box") == null) {
+        val toc = if (doc1.selectFirst("div.p-eplist") == null) {
             listOf(
                 RemoteNovelMetadata.TocItem(
                     title = "无名",
@@ -231,7 +228,7 @@ class Syosetu(
             )
         } else {
             val totalPages = doc1
-                .getElementsByClass("novelview_pager-last")
+                .getElementsByClass("c-pager__item--last")
                 .first()
                 ?.attr("href")
                 ?.substringAfterLast("/?p=")
@@ -239,7 +236,7 @@ class Syosetu(
                 ?: 1
 
             fun parseToc(doc: Document) = doc
-                .selectFirst("div.index_box")!!
+                .selectFirst("div.p-eplist")!!
                 .children()
                 .map { child ->
                     child.selectFirst("a")?.let { a ->
@@ -250,7 +247,7 @@ class Syosetu(
                                 .substringAfterLast("/"),
                             createAt = parseJapanDateString(
                                 "yyyy/MM/dd HH:mm",
-                                child.selectFirst("dt")!!.firstChild().toString().trim()
+                                child.selectFirst("div.p-eplist__update")!!.textNodes()[0].text(),
                             )
                         )
                     } ?: RemoteNovelMetadata.TocItem(
@@ -289,7 +286,7 @@ class Syosetu(
         val doc = client.get(url).document()
         doc.select("rp").remove()
         doc.select("rt").remove()
-        val paragraphs = doc.select("div#novel_honbun > p").map { p ->
+        val paragraphs = doc.select("div.p-novel__body > div > p").map { p ->
             p
                 .firstElementChild()
                 ?.firstElementChild()

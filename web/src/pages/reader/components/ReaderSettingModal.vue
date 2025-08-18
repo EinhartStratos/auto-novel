@@ -1,8 +1,9 @@
 <script lang="ts" setup>
 import { Locator } from '@/data';
 import { ReaderSetting } from '@/data/setting/Setting';
-import { useIsWideScreen } from '@/pages/util';
+import { checkIsMobile, useIsWideScreen } from '@/pages/util';
 
+const isMobile = checkIsMobile();
 const isWideScreen = useIsWideScreen(600);
 const { setting } = Locator.readerSettingRepository();
 
@@ -13,7 +14,7 @@ const setCustomFontColor = (color: string) =>
 </script>
 
 <template>
-  <c-modal content-style="padding: 0;">
+  <c-modal content-style="padding: 0;" :max-height-percentage="80">
     <n-tabs
       type="line"
       size="large"
@@ -45,21 +46,29 @@ const setCustomFontColor = (color: string) =>
             </n-flex>
           </c-action-wrapper>
 
-          <c-action-wrapper title="朗读">
+          <c-action-wrapper v-if="isMobile" title="点按区域">
+            <c-radio-group
+              v-model:value="setting.clickArea"
+              :options="ReaderSetting.clickAreaOptions"
+            />
+          </c-action-wrapper>
+
+          <c-action-wrapper title="朗读语言">
             <c-radio-group
               :value="setting.speakLanguages[0]"
-              @update-value="(it) => (setting.speakLanguages = [it])"
+              @update-value="(it: any) => (setting.speakLanguages = [it])"
               :options="ReaderSetting.speakLanguagesOptions"
             />
           </c-action-wrapper>
-
-          <c-action-wrapper title="Sakura报错按钮" align="center">
+          <c-action-wrapper v-if="isMobile" title="点按动画" align="center">
             <n-switch
-              v-model:value="setting.enableSakuraReportButton"
+              v-model:value="setting.enableClickAnimition"
               size="small"
             />
           </c-action-wrapper>
-
+          <c-action-wrapper title="显示翻译来源" align="center">
+            <n-switch v-model:value="setting.enableSourceLabel" size="small" />
+          </c-action-wrapper>
           <c-action-wrapper title="去除缩进" align="center">
             <n-switch v-model:value="setting.trimLeadingSpaces" size="small" />
           </c-action-wrapper>
@@ -116,6 +125,13 @@ const setCustomFontColor = (color: string) =>
             <n-text style="width: 6em">{{ setting.pageWidth }}px</n-text>
           </c-action-wrapper>
 
+          <c-action-wrapper title="下划线">
+            <c-radio-group
+              v-model:value="setting.textUnderline"
+              :options="ReaderSetting.textUnderlineOptions"
+            />
+          </c-action-wrapper>
+
           <c-action-wrapper title="主题">
             <n-flex size="large" vertical>
               <c-radio-group
@@ -126,6 +142,7 @@ const setCustomFontColor = (color: string) =>
                 <n-flex>
                   <n-radio
                     v-for="theme of ReaderSetting.themeOptions"
+                    :key="theme.bodyColor"
                     :checked="theme.bodyColor == setting.theme.bodyColor"
                     @update:checked="
                       setting.theme = { mode: 'custom', ...theme }

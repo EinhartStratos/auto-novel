@@ -20,8 +20,8 @@ export class YoudaoTranslator implements SegmentTranslator {
 
   async init() {
     try {
-      this.api.rlog();
-      this.api.refreshKey();
+      await this.api.rlog();
+      await this.api.refreshKey();
     } catch (e) {
       this.log('无法获得Key，使用默认值');
     }
@@ -53,15 +53,17 @@ export class YoudaoTranslator implements SegmentTranslator {
     const decoded = await this.api.webtranslate(seg.join('\n'), from, {
       signal,
     });
-    const decodedJson = safeJson<any>(decoded);
+    const decodedJson = safeJson<{ translateResult: { tgt: string }[][] }>(
+      decoded,
+    );
 
     if (decodedJson === undefined) {
       this.log(`　错误：${decoded}`);
       throw 'quit';
     } else {
       try {
-        const result = decodedJson['translateResult'].map((it: any) =>
-          it.map((it: any) => it.tgt.trimEnd()).join(''),
+        const result = decodedJson['translateResult'].map((it) =>
+          it.map((it) => it.tgt.trimEnd()).join(''),
         );
         return result;
       } catch (e) {

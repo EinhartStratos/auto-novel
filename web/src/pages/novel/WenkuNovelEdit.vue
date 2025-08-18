@@ -24,7 +24,7 @@ import { doAction, useIsWideScreen } from '@/pages/util';
 import { useWenkuNovelStore } from './WenkuNovelStore';
 
 const { novelId } = defineProps<{
-  novelId?: string;
+  novelId: string | undefined;
 }>();
 
 const store = novelId !== undefined ? useWenkuNovelStore(novelId) : undefined;
@@ -33,7 +33,7 @@ const router = useRouter();
 const isWideScreen = useIsWideScreen();
 const message = useMessage();
 
-const { atLeastMaintainer, createAtLeastOneMonth } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 
 const allowSubmit = ref(novelId === undefined);
 const formRef = ref<FormInst>();
@@ -84,7 +84,7 @@ const formRules: FormRules = {
   level: [
     {
       validator: (_rule: FormItemRule, value: string) =>
-        value !== '成人向' || createAtLeastOneMonth.value,
+        value !== '成人向' || whoami.value.allowNsfw,
       message: '你太年轻了，无法创建成人向页面',
       trigger: 'input',
     },
@@ -266,9 +266,14 @@ const findSimilarNovels = async () => {
     message.error('搜索相似小说失败:' + result.error.message);
   }
 };
-const confirmNovelNotExist = () => {
-  if (submitCurrentStep.value === 1) {
-    submitCurrentStep.value = 2;
+const moveToPrevStep = () => {
+  if (submitCurrentStep.value > 1) {
+    submitCurrentStep.value -= 1;
+  }
+};
+const moveToNextStep = () => {
+  if (submitCurrentStep.value < 3) {
+    submitCurrentStep.value += 1;
   }
 };
 const topVolume = (asin: string) => {
@@ -337,15 +342,16 @@ const levelOptions = [
       </n-text>
       <n-ul>
         <n-li>
-          文库小说只允许已经发行单行本的小说，原则上以亚马逊上可以买到为准，系列小说不要分开导入。
+          请先安装机翻站扩展以启用智能导入功能，另外自动机翻简介功能要求你能使用有道机翻。
         </n-li>
         <n-li>
-          可以使用智能导入功能，输入亚马逊系列/单本链接直接导入，或是输入小说标题搜索导入。
+          文库小说只允许已经发行单行本的日语小说，原则上以亚马逊上可以买到为准，系列小说不要分开导入。
         </n-li>
-        <n-li>导入R18书需要安装插件，并在亚马逊上点过“已满18岁”。</n-li>
-        <n-li>不要重复创建，请确定文库小说列表里面没有这本。 </n-li>
         <n-li>
-          不要创建文库页再去寻找资源，最后发现资源用不了，留下一个空的文库页。
+          在导入栏输入亚马逊系列/单本链接直接导入，或是输入小说日文主标题搜索导入。
+        </n-li>
+        <n-li>
+          导入R18书需要注册机翻站满一个月、使用日本IP，并在亚马逊上点过“已满18岁”。
         </n-li>
       </n-ul>
     </n-card>
@@ -389,7 +395,7 @@ const levelOptions = [
             @action="populateNovelFromAmazon('', true)"
           />
           <c-button
-            v-if="atLeastMaintainer"
+            v-if="whoami.isAdmin"
             type="error"
             secondary
             label="标记重复"
@@ -438,7 +444,7 @@ const levelOptions = [
         <n-dynamic-tags v-model:value="formValue.authors" />
       </n-form-item-row>
 
-      <n-form-item-row path="artists" label="插图">
+      <n-form-item-row path="artists" label="画师">
         <n-dynamic-tags v-model:value="formValue.artists" />
       </n-form-item-row>
 
@@ -486,6 +492,7 @@ const levelOptions = [
               </n-tag>
               <n-tag
                 v-for="keyword of group.presetKeywords"
+                :key="keyword"
                 size="small"
                 checkable
                 :checked="formValue.keywords.includes(keyword)"
@@ -614,45 +621,70 @@ const levelOptions = [
       style="margin-left: 8px"
     >
       <n-step title="检查小说是否已经存在">
-        <div class="n-step-description">
-          <n-p>
-            请点击搜索按钮，确定你要创建的小说确实还不存在，再进行下一步。
-          </n-p>
-          <n-p>
-            <span v-if="similarNovels === null"> 未搜索 </span>
-            <span v-else-if="similarNovels.length === 0"> 没有相似的小说 </span>
-            <n-grid v-else :x-gap="12" :y-gap="12" cols="3 600:6">
-              <n-grid-item v-for="item in similarNovels">
-                <router-link :to="`/wenku/${item.id}`">
-                  <ImageCard
-                    :src="item.cover"
-                    :title="item.titleZh ? item.titleZh : item.title"
-                  />
-                </router-link>
-              </n-grid-item>
-            </n-grid>
-          </n-p>
-
-          <n-p>
-            <n-button-group>
-              <n-button @click="findSimilarNovels()"> 搜索相似小说 </n-button>
-              <n-button @click="confirmNovelNotExist()">
-                确定小说不存在
-              </n-button>
-            </n-button-group>
-          </n-p>
-        </div>
+        <p>
+          创建文库页面前，请先确定你要创建的小说页面不存在，不要重复创建。你可以通过下面的搜索按钮搜索章节标题，注意自动搜索不总是能正确提取出关键词，如果关键词不正确，请手动搜索日文标题。
+        </p>
+        <p>
+          自动搜索关键词：
+          <b>
+            {{
+              title.split(
+                /[^\u3040-\u309f\u30a0-\u30ff\u4e00-\u9faf\u3400-\u4dbf]/,
+                2,
+              )[0]
+            }}
+          </b>
+        </p>
+        <p v-if="similarNovels !== null">
+          <template v-if="similarNovels.length === 0">没有相似的小说</template>
+          <n-grid v-else :x-gap="12" :y-gap="12" cols="3 600:6">
+            <n-grid-item v-for="item in similarNovels" :key="item.id">
+              <router-link :to="`/wenku/${item.id}`">
+                <ImageCard
+                  :src="item.cover"
+                  :title="item.titleZh ? item.titleZh : item.title"
+                />
+              </router-link>
+            </n-grid-item>
+          </n-grid>
+        </p>
+        <n-button-group v-if="submitCurrentStep === 1">
+          <c-button
+            label="我确定小说不存在"
+            type="warning"
+            @click="moveToNextStep"
+          />
+          <c-button label="自动搜索相似小说" @click="findSimilarNovels" />
+        </n-button-group>
       </n-step>
-      <n-step title="创建小说">
-        <div class="n-step-description"></div>
-        <c-button
-          label="提交"
-          :icon="UploadOutlined"
-          require-login
-          type="primary"
-          :disabled="submitCurrentStep !== 2"
-          @action="submit"
-        />
+
+      <n-step title="检查小说文件是否可以上传">
+        <p>
+          创建文库页面前，请先确认你有可以上传的小说文件。不要创建文库页再去寻找资源，最后发现资源用不了或者找不到，留下一个空的文库页。尤其禁止创建空页面来求书，会被封号。
+        </p>
+        <p>PDF、或者内容只有图片的EPUB是无法上传的。</p>
+
+        <n-button-group v-if="submitCurrentStep === 2">
+          <c-button
+            label="我确定我有可以上传的文件"
+            type="warning"
+            @click="moveToNextStep"
+          />
+          <c-button label="上一步" @click="moveToPrevStep" />
+        </n-button-group>
+      </n-step>
+
+      <n-step title="创建文库小说">
+        <n-button-group v-if="submitCurrentStep === 3" style="margin-top: 16px">
+          <c-button
+            label="提交"
+            :icon="UploadOutlined"
+            require-login
+            type="primary"
+            @action="submit"
+          />
+          <c-button label="上一步" @click="moveToPrevStep" />
+        </n-button-group>
       </n-step>
     </n-steps>
   </div>
@@ -665,7 +697,7 @@ const levelOptions = [
       下面是一些标签的具体解释。注意，同一个标签在一般向和R18下可能存在区别。
     </n-p>
     <n-divider />
-    <n-p v-for="row of presetKeywords.explanations">
+    <n-p v-for="row of presetKeywords.explanations" :key="row.word">
       <b>{{ row.word }}</b>
       <br />
       {{ row.explanation }}

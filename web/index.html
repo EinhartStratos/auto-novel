@@ -7,7 +7,7 @@
       name="description"
       content="轻小说机翻机器人是一个能自动生成轻小说译文并分享的网站。在这里，你可以浏览日文网络小说/文库小说，也可以上传自己的小说文件进行机器翻译。"
     />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <meta
       name="viewport"
@@ -15,7 +15,7 @@
     />
     <meta name="renderer" content="webkit" />
     <meta name="force-rendering" content="webkit" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
+    <meta name="theme-color" content="white" />
     <script
       async
       src="https://www.googletagmanager.com/gtag/js?id=G-QD8MZ90XFJ"
@@ -29,52 +29,73 @@
       gtag('config', 'G-QD8MZ90XFJ');
     </script>
     <script>
-      window.onerror = function (msg, url, lno, cno) {
-        var div = document.createElement('div');
-        div.innerHTML = `Error: ${lno}:${cno} ${msg
-          .replace('<', '&lt;')
-          .replace('>', '&gt;')} ${url}`;
-        div.style.position = 'fixed';
-        document.body.appendChild(div);
-        return false;
-      };
-    </script>
-    <script>
       (() => {
-        function createBodyStyle(backgroundColor) {
+        function applyTheme(toolbarColor, backgroundColor) {
+          document.querySelector("meta[name='theme-color']").content =
+            toolbarColor;
+
           const style = document.createElement('style');
           style.innerHTML = `body { background-color: ${backgroundColor}; }`;
           document.head.appendChild(style);
         }
-        const reg = [
-          /\/novel\/(\w+)\/(\w+)\/(\w+)/,
-          /\/workspace\/reader\/(\w+)\/(\w+)/,
-        ];
-        const isReader = reg.some((r) => r.test(window.location.pathname));
-        const setting = localStorage.getItem(
-          isReader ? 'readerSetting' : 'setting',
-        );
-        if (!setting) return;
-        const json = JSON.parse(setting);
-        const theme = isReader ? json.theme.mode : json.theme;
-        if (
-          theme === 'dark' ||
-          (theme === 'system' &&
-            window.matchMedia('(prefers-color-scheme: dark)').matches)
-        ) {
-          createBodyStyle('rgb(16, 16, 20)');
-        } else if (theme === 'custom') {
-          createBodyStyle(json.theme.bodyColor);
+        function getAndApplyTheme() {
+          const reg = [
+            /\/novel\/(\w+)\/(\w+)\/(\w+)/,
+            /\/workspace\/reader\/(\w+)\/(\w+)/,
+          ];
+          const isReader = reg.some((r) => r.test(window.location.pathname));
+          const setting = localStorage.getItem(
+            isReader ? 'readerSetting' : 'setting',
+          );
+          if (!setting) return;
+          const json = JSON.parse(setting);
+          let theme = isReader ? json.theme.mode : json.theme;
+          if (!theme) theme = 'system';
+          if (theme === 'custom') {
+            applyTheme(json.theme.bodyColor, json.theme.bodyColor);
+          } else if (
+            theme === 'dark' ||
+            (theme === 'system' &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches)
+          ) {
+            applyTheme('rgb(24, 24, 28)', 'rgb(16, 16, 20)');
+          } else {
+            applyTheme('white', 'white');
+          }
+        }
+        getAndApplyTheme();
+        if (window.history) {
+          const oldPushState = history.pushState;
+          history.pushState = function pushState() {
+            const ret = oldPushState.apply(this, arguments);
+            getAndApplyTheme();
+            return ret;
+          };
+          window.addEventListener('popstate', () => {
+            getAndApplyTheme();
+          });
         }
       })();
     </script>
+    <script>
+      // vite bug, see https://github.com/vitejs/vite/discussions/15794
+      if (!('hasOwn' in Object)) {
+        Object.hasOwn = Object.call.bind(Object.hasOwnProperty);
+      }
+    </script>
   </head>
   <body>
+    <div id="fallback-error" style="position: fixed; height: 100vh"></div>
+    <script>
+      window.onerror = function (msg, url, line, col) {
+        var div = document.createElement('div');
+        div.innerText = `Error: ${line}:${col} ${msg} ${url}`;
+        document.getElementById('fallback-error').appendChild(div);
+        return false;
+      };
+    </script>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
-    <noscript>
-      <p>本页面需要浏览器启用JavaScript。</p>
-      <p>如果已经启用，那...朋友，你该更新浏览器了。</p>
-    </noscript>
+    <noscript>本页面需要浏览器启用JavaScript</noscript>
   </body>
 </html>

@@ -1,21 +1,23 @@
 <script lang="ts" setup>
-import { DeleteOutlineOutlined, PlusOutlined } from '@vicons/material';
+import {
+  BookOutlined,
+  DeleteOutlineOutlined,
+  PlusOutlined,
+} from '@vicons/material';
 import { VueDraggable } from 'vue-draggable-plus';
 
 import { Locator } from '@/data';
 import { TranslateJob } from '@/model/Translator';
-import { notice } from '@/pages/components/NoticeBoard.vue';
-import { doAction, useIsWideScreen } from '@/pages/util';
+
+import { doAction } from '@/pages/util';
 
 const message = useMessage();
-const isWideScreen = useIsWideScreen();
-
-const { setting } = Locator.settingRepository();
 
 const workspace = Locator.gptWorkspaceRepository();
 const workspaceRef = workspace.ref;
 
 const showCreateWorkerModal = ref(false);
+const showLocalVolumeDrawer = ref(false);
 
 type ProcessedJob = TranslateJob & {
   progress?: { finished: number; error: number; total: number };
@@ -56,14 +58,14 @@ const onProgressUpdated = (
     | { state: 'processed'; finished: number; error: number; total: number },
 ) => {
   if (state.state === 'finish') {
-    const job = processedJobs.value.get(task)!!;
+    const job = processedJobs.value.get(task)!;
     processedJobs.value.delete(task);
     if (!state.abort) {
       workspace.addJobRecord(job);
       workspace.deleteJob(task);
     }
   } else {
-    const job = processedJobs.value.get(task)!!;
+    const job = processedJobs.value.get(task)!;
     job.progress = {
       finished: state.finished,
       error: state.error,
@@ -78,42 +80,27 @@ const clearCache = async () =>
     '缓存清除',
     message,
   );
-
-const notices = [
-  notice(
-    '当您添加翻译器时，若链接留空，则表示将使用OpenAI官方链接，您也可以提供链接以使用第三方GPT代理。',
-  ),
-  notice(
-    '当使用GPT-3.5 Web且选择官方链接时，需要安装相应的插件，详情看使用教程。',
-  ),
-];
 </script>
 
 <template>
-  <c-layout
-    :sidebar="isWideScreen && !setting.hideLocalVolumeListInWorkspace"
-    :sidebar-width="320"
-    class="layout-content"
-  >
+  <div class="layout-content">
     <n-h1>GPT工作区</n-h1>
 
-    <notice-board :notices="notices">
+    <bulletin>
       <n-flex>
-        <c-a to="/forum/64f3d63f794cbb1321145c07" target="_blank">
-          使用教程
-        </c-a>
+        <c-a to="/forum/64f3d63f794cbb1321145c07" target="_blank">使用教程</c-a>
         /
-        <n-a href="https://github.com/eujc/ChatGPT" target="_blank">
-          帐号注册教程
+        <n-a href="https://chat.deepseek.com" target="_blank">
+          DeepSeek Chat
         </n-a>
         /
-        <n-a href="https://chat.openai.com/" target="_blank"> ChatGPT </n-a>
-        /
-        <n-a href="https://chat.openai.com/api/auth/session" target="_blank">
-          AccessToken
+        <n-a href="https://platform.deepseek.com/usage" target="_blank">
+          DeepSeek API
         </n-a>
       </n-flex>
-    </notice-board>
+      <n-p>不再支持GPT web，推荐使用deepseek API，价格很低。</n-p>
+      <n-p>本地小说支持韩语等其他语种，网络小说/文库小说暂时只允许日语。</n-p>
+    </bulletin>
 
     <section-header title="翻译器">
       <c-button
@@ -121,7 +108,8 @@ const notices = [
         :icon="PlusOutlined"
         @action="showCreateWorkerModal = true"
       />
-      <c-button
+      <c-button-confirm
+        hint="真的要清空缓存吗？"
         label="清空缓存"
         :icon="DeleteOutlineOutlined"
         @action="clearCache"
@@ -138,7 +126,7 @@ const notices = [
         :animation="150"
         handle=".drag-trigger"
       >
-        <n-list-item v-for="worker of workspaceRef.workers">
+        <n-list-item v-for="worker of workspaceRef.workers" :key="worker.id">
           <job-worker
             :worker="{ translatorId: 'gpt', ...worker }"
             :get-next-job="getNextJob"
@@ -150,9 +138,15 @@ const notices = [
 
     <section-header title="任务队列">
       <c-button
+        label="本地书架"
+        :icon="BookOutlined"
+        @action="showLocalVolumeDrawer = true"
+      />
+      <c-button-confirm
+        hint="真的要清空队列吗？"
         label="清空队列"
         :icon="DeleteOutlineOutlined"
-        @action="deleteAllJobs()"
+        @action="deleteAllJobs"
       />
     </section-header>
     <n-empty v-if="workspaceRef.jobs.length === 0" description="没有任务" />
@@ -175,11 +169,12 @@ const notices = [
     </n-list>
 
     <job-record-section id="gpt" />
+  </div>
 
-    <template #sidebar>
-      <local-volume-list-specific-translation type="gpt" />
-    </template>
-  </c-layout>
+  <local-volume-list-specific-translation
+    v-model:show="showLocalVolumeDrawer"
+    type="gpt"
+  />
 
   <gpt-worker-modal v-model:show="showCreateWorkerModal" />
 </template>

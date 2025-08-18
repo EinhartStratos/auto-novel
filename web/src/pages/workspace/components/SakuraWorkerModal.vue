@@ -9,7 +9,7 @@ const props = defineProps<{
   worker?: SakuraWorker;
 }>();
 const emit = defineEmits<{
-  (e: 'update:show', show: boolean): void;
+  'update:show': [boolean];
 }>();
 
 const workspace = Locator.sakuraWorkspaceRepository();
@@ -51,6 +51,18 @@ const formRules: FormRules = {
     {
       validator: (rule: FormItemRule, value: string) => value.trim().length > 0,
       message: '链接不能为空',
+      trigger: 'input',
+    },
+    {
+      validator: (rule: FormItemRule, value: string) => {
+        try {
+          const url = new URL(value);
+          return url.protocol === 'http:' || url.protocol === 'https:';
+        } catch (_) {
+          return false;
+        }
+      },
+      message: '链接不合法',
       trigger: 'input',
     },
   ],

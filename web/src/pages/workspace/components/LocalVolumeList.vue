@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import { MoreVertOutlined } from '@vicons/material';
+import { FileDownloadOutlined, MoreVertOutlined } from '@vicons/material';
 
 import { Locator } from '@/data';
 import { Setting } from '@/data/setting/Setting';
@@ -11,7 +11,6 @@ import {
 } from '@/pages/bookshelf/BookshelfLocalStore';
 
 const props = defineProps<{
-  hideTitle?: boolean;
   options?: { [key: string]: (volumes: LocalVolumeMetadata[]) => void };
   filter?: (volume: LocalVolumeMetadata) => boolean;
 }>();
@@ -29,17 +28,15 @@ const { volumes } = storeToRefs(store);
 store.loadVolumes();
 
 const options = computed(() => {
-  return [...Object.keys(props.options ?? {}), '批量删除', '批量下载'].map(
-    (it) => ({ label: it, key: it }),
-  );
+  return [...Object.keys(props.options ?? {}), '批量删除'].map((it) => ({
+    label: it,
+    key: it,
+  }));
 });
 const handleSelect = (key: string) => {
   switch (key) {
     case '批量删除':
       openDeleteModal();
-      break;
-    case '批量下载':
-      downloadVolumes();
       break;
     default:
       props.options?.[key]?.(volumes.value ?? []);
@@ -79,6 +76,16 @@ const search = reactive({
   enableRegexMode: false,
 });
 
+const favoredRepository = Locator.favoredRepository();
+const favoreds = favoredRepository.favoreds;
+const selectedFavored = ref<string | undefined>(favoreds.value.local[0]?.id);
+const favoredsOptions = computed(() => {
+  return favoreds.value.local.map(({ id, title }) => ({
+    label: title,
+    value: id,
+  }));
+});
+
 const sortedVolumes = computed(() => {
   const filteredVolumes =
     props.filter === undefined
@@ -86,16 +93,24 @@ const sortedVolumes = computed(() => {
       : volumes.value.filter(props.filter);
   return BookshelfLocalUtil.filterAndSortVolumes(filteredVolumes, {
     ...search,
+    favoredId: selectedFavored.value,
     order: setting.value.localVolumeOrder,
   });
 });
 </script>
 
 <template>
-  <section-header title="本地小说" v-if="!hideTitle">
-    <n-flex :wrap="false">
-      <bookshelf-local-add-button @done="$emit('volumeAdd', $event)" />
-
+  <c-drawer-right title="本地小说">
+    <template #action>
+      <bookshelf-local-add-button
+        :favored-id="selectedFavored"
+        @done="emit('volumeAdd', $event)"
+      />
+      <c-button
+        label="下载"
+        :icon="FileDownloadOutlined"
+        @click="downloadVolumes"
+      />
       <n-dropdown
         trigger="click"
         :options="options"
@@ -106,53 +121,63 @@ const sortedVolumes = computed(() => {
           <n-icon :component="MoreVertOutlined" />
         </n-button>
       </n-dropdown>
-    </n-flex>
-  </section-header>
-
-  <n-flex vertical>
-    <c-action-wrapper title="搜索">
-      <search-input
-        v-model:value="search"
-        placeholder="搜索文件名"
-        style="max-width: 400px"
-      />
-    </c-action-wrapper>
-
-    <c-action-wrapper title="排序" align="center">
-      <order-sort
-        v-model:value="setting.localVolumeOrder"
-        :options="Setting.localVolumeOrderOptions"
-      />
-    </c-action-wrapper>
-    <slot name="extra" />
-  </n-flex>
-
-  <n-divider style="margin: 16px 0 8px" />
-
-  <n-spin v-if="sortedVolumes === undefined" style="margin-top: 20px" />
-
-  <n-empty
-    v-else-if="sortedVolumes.length === 0"
-    description="没有文件"
-    style="margin-top: 20px"
-  />
-
-  <n-scrollbar v-else trigger="none" :size="24" style="flex: auto">
-    <n-list style="padding-bottom: 48px; padding-right: 12px">
-      <n-list-item v-for="volume of sortedVolumes ?? []" :key="volume.id">
-        <slot name="volume" v-bind="volume" />
-      </n-list-item>
-    </n-list>
-  </n-scrollbar>
-
-  <c-modal title="清空所有文件" v-model:show="showDeleteModal">
-    <n-p>
-      这将清空你的浏览器里面保存的所有EPUB/TXT文件，包括已经翻译的章节和术语表，无法恢复。
-      你确定吗？
-    </n-p>
-
-    <template #action>
-      <c-button label="确定" type="primary" @action="deleteAllVolumes" />
     </template>
-  </c-modal>
+
+    <div style="padding: 24px 16px">
+      <n-flex vertical>
+        <c-action-wrapper title="搜索">
+          <search-input
+            v-model:value="search"
+            placeholder="搜索文件名"
+            style="max-width: 400px"
+          />
+        </c-action-wrapper>
+
+        <c-action-wrapper v-if="favoreds.local.length > 1" title="收藏">
+          <n-select
+            v-model:value="selectedFavored"
+            :options="favoredsOptions"
+            style="max-width: 400px"
+          />
+        </c-action-wrapper>
+
+        <c-action-wrapper title="排序" align="center">
+          <order-sort
+            v-model:value="setting.localVolumeOrder"
+            :options="Setting.localVolumeOrderOptions"
+          />
+        </c-action-wrapper>
+        <slot name="extra" />
+      </n-flex>
+
+      <n-divider style="margin: 16px 0 8px" />
+
+      <n-spin v-if="sortedVolumes === undefined" style="margin-top: 20px" />
+
+      <n-empty
+        v-else-if="sortedVolumes.length === 0"
+        description="没有文件"
+        style="margin-top: 20px"
+      />
+
+      <n-scrollbar v-else trigger="none" :size="24" style="flex: auto">
+        <n-list style="padding-bottom: 48px; padding-right: 12px">
+          <n-list-item v-for="volume of sortedVolumes ?? []" :key="volume.id">
+            <slot name="volume" v-bind="volume" />
+          </n-list-item>
+        </n-list>
+      </n-scrollbar>
+
+      <c-modal title="清空所有文件" v-model:show="showDeleteModal">
+        <n-p>
+          这将清空你的浏览器里面保存的所有EPUB/TXT文件，包括已经翻译的章节和术语表，无法恢复。
+          你确定吗？
+        </n-p>
+
+        <template #action>
+          <c-button label="确定" type="primary" @action="deleteAllVolumes" />
+        </template>
+      </c-modal>
+    </div>
+  </c-drawer-right>
 </template>

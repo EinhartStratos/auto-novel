@@ -1,22 +1,32 @@
+networks:
+  default:
+    name: auto-novel
+    driver: bridge
+
 services:
-  proxy:
-    image: ghcr.io/fishhawk/wneg-proxy
+  web:
+    image: ghcr.io/auto-novel/auto-novel-web:latest
     ports:
       - 80:80
     volumes:
-      - ${DATA_PATH}/files-web:/data/files-web
-      - ${DATA_PATH}/files-wenku:/data/files-wenku
-      - ${DATA_PATH}/files-extra:/data/files-extra
+      - ./data/files-temp:/data/files-temp
+      - ./data/files-wenku:/data/files-wenku
+      - ./data/files-extra:/data/files-extra
     restart: always
 
   server:
-    image: ghcr.io/fishhawk/wneg-server
+    image: ghcr.io/auto-novel/auto-novel-server:latest
     depends_on:
       - mongo
+      - elasticsearch
+      - redis
     environment:
       - HTTPS_PROXY
-      - EMAIL_PASSWORD
+      - MAILGUN_API_KEY
+      - MAILGUN_API_URL
+      - MAILGUN_FROM_EMAIL
       - JWT_SECRET
+      - HAMELN_TOKEN
       - PIXIV_COOKIE_PHPSESSID
       - DB_HOST_MONGO=mongo
       - DB_HOST_ES=elasticsearch
@@ -24,9 +34,9 @@ services:
     ports:
       - 8081:8081
     volumes:
-      - ${DATA_PATH}/files-web:/data/files-web
-      - ${DATA_PATH}/files-wenku:/data/files-wenku
-      - ${DATA_PATH}/files-extra:/data/files-extra
+      - ./data/files-temp:/data/files-temp
+      - ./data/files-wenku:/data/files-wenku
+      - ./data/files-extra:/data/files-extra
     restart: always
 
   mongo:
@@ -36,11 +46,11 @@ services:
     ports:
       - 27017:27017
     volumes:
-      - ${DATA_PATH}/db:/data/db
+      - ./data/db:/data/db
     restart: always
 
   elasticsearch:
-    image: elasticsearch:8.6.1
+    image: elasticsearch:8.18.1
     environment:
       - xpack.security.enabled=false
       - discovery.type=single-node
@@ -54,8 +64,8 @@ services:
     cap_add:
       - IPC_LOCK
     volumes:
-      - ${DATA_PATH}/es/data:/usr/share/elasticsearch/data
-      - ${DATA_PATH}/es/plugins:/usr/share/elasticsearch/plugins
+      - ./data/es/data:/usr/share/elasticsearch/data
+      - ./data/es/plugins:/usr/share/elasticsearch/plugins
     ports:
       - 9200:9200
     restart: always

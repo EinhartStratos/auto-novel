@@ -20,7 +20,7 @@ const router = useRouter();
 const isWideScreen = useIsWideScreen(600);
 const isMobile = checkIsMobile();
 
-const { isSignedIn } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 const { setting } = Locator.readerSettingRepository();
 
 const gnid = ((): GenericNovelId => {
@@ -74,7 +74,7 @@ const navToChapter = async (chapterId: string) => {
   if (currentChapterId.value !== chapterId) {
     if (result.ok) {
       document.title = result.value.titleJp;
-      if (gnid.type === 'web' && isSignedIn) {
+      if (gnid.type === 'web' && whoami.value.isSignedIn) {
         Locator.readHistoryRepository().updateReadHistoryWeb(
           gnid.providerId,
           gnid.novelId,
@@ -148,6 +148,9 @@ onKeyDown(['ArrowRight'], (e) => {
 });
 
 onKeyDown(['1', '2', '3', '4'], (e) => {
+  if (e.altKey || e.ctrlKey || e.shiftKey || e.metaKey) {
+    return;
+  }
   const setting = Locator.readerSettingRepository().setting.value;
 
   const translatorIds = <TranslatorId[]>['baidu', 'youdao', 'gpt', 'sakura'];
@@ -170,6 +173,9 @@ const showSettingModal = ref(false);
 const showCatalogModal = ref(false);
 
 onKeyDown(['Enter'], (e) => {
+  if (showSettingModal.value) {
+    return;
+  }
   showCatalogModal.value = !showCatalogModal.value;
   e.preventDefault();
 });
@@ -185,7 +191,7 @@ onKeyDown(['Enter'], (e) => {
       :type="id ? 'primary' : 'default'"
       @action="
         () => {
-          navToChapter(id!!);
+          navToChapter(id!);
         }
       "
     />
@@ -269,7 +275,6 @@ onKeyDown(['Enter'], (e) => {
       v-model:show="showCatalogModal"
       :gnid="gnid"
       :chapter-id="currentChapterId"
-      @nav="navToChapter"
     />
   </div>
 </template>

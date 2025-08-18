@@ -2,12 +2,14 @@
 import { darkTheme, dateZhCN, useOsTheme, zhCN } from 'naive-ui';
 
 import { Locator } from '@/data';
-import { isDarkColor } from '@/pages/util';
 import { RegexUtil } from '@/util';
 
 // 激活权限
 const authRepository = Locator.authRepository();
-authRepository.activateAuth();
+authRepository.startRefreshAuth();
+
+const settingRepository = Locator.settingRepository();
+settingRepository.activateCC();
 
 // 清理pinia留下的垃圾
 Object.keys(window.localStorage).forEach((key) => {
@@ -20,8 +22,16 @@ Object.keys(window.localStorage).forEach((key) => {
 const route = useRoute();
 const osThemeRef = useOsTheme();
 
-const { setting } = Locator.settingRepository();
+const setting = settingRepository.setting;
 const { setting: readerSetting } = Locator.readerSettingRepository();
+
+const isDarkColor = (color: string) => {
+  const r = parseInt(color.substring(1, 3), 16);
+  const g = parseInt(color.substring(3, 5), 16);
+  const b = parseInt(color.substring(5, 7), 16);
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+  return brightness < 120;
+};
 
 const buildTheme = (
   theme: 'light' | 'dark' | 'system' | 'custom',
@@ -38,7 +48,7 @@ const buildTheme = (
     case 'system':
       return { isDark: osThemeRef.value === 'dark' };
     case 'custom':
-      return { isDark: isDarkColor(bodyColor!!), bodyColor };
+      return { isDark: isDarkColor(bodyColor!), bodyColor };
   }
 };
 const theme = computed(() => {
@@ -93,9 +103,6 @@ if (RegexUtil.isSafari(navigator.userAgent)) {
 </template>
 
 <style>
-body {
-  overflow-y: scroll;
-}
 a {
   text-decoration: none;
 }
@@ -124,5 +131,25 @@ li {
 }
 .sortable-ghost {
   opacity: 0.7;
+}
+
+@supports (-webkit-touch-callout: none) {
+  /* 仅在支持 -webkit-touch-callout 的设备上生效（iOS 特有） */
+
+  .v-vl:not(.v-vl--show-scrollbar),
+  .n-scrollbar > .n-scrollbar-container {
+    scrollbar-width: unset;
+  }
+
+  .v-vl:not(.v-vl--show-scrollbar)::-webkit-scrollbar,
+  .v-vl:not(.v-vl--show-scrollbar)::-webkit-scrollbar-track-piece,
+  .v-vl:not(.v-vl--show-scrollbar)::-webkit-scrollbar-thumb,
+  .n-scrollbar > .n-scrollbar-container::-webkit-scrollbar,
+  .n-scrollbar > .n-scrollbar-container::-webkit-scrollbar-track-piece,
+  .n-scrollbar > .n-scrollbar-container::-webkit-scrollbar-thumb {
+    width: unset;
+    height: unset;
+    display: unset;
+  }
 }
 </style>

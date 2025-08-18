@@ -11,15 +11,17 @@ const props = defineProps<{
     | { type: 'web'; providerId: string; novelId: string }
     | { type: 'wenku'; novelId: string };
 }>();
-const emit = defineEmits<{ 'update:favored': [string | undefined] }>();
+const emit = defineEmits<{
+  'update:favored': [string | undefined];
+}>();
 
 const message = useMessage();
 
-const { isSignedIn } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 const favoredRepository = Locator.favoredRepository();
 
 onMounted(async () => {
-  if (isSignedIn.value) {
+  if (whoami.value.isSignedIn) {
     try {
       await favoredRepository.loadRemoteFavoreds();
     } catch (e) {
@@ -64,7 +66,7 @@ const selectedFavoredId = ref(props.favored ?? 'default');
 <template>
   <template v-if="favoreds.length <= 1">
     <c-button
-      v-if="favored"
+      v-if="favored && favoredTitle"
       label="已收藏"
       :icon="FavoriteOutlined"
       require-login
@@ -81,7 +83,7 @@ const selectedFavoredId = ref(props.favored ?? 'default');
 
   <template v-else>
     <c-button
-      :label="favored ? '已收藏:' + favoredTitle : '收藏'"
+      :label="favored && favoredTitle ? '已收藏:' + favoredTitle : '收藏'"
       :icon="favored ? FavoriteOutlined : FavoriteBorderOutlined"
       require-login
       @action="showFavoredModal = true"
@@ -92,13 +94,13 @@ const selectedFavoredId = ref(props.favored ?? 'default');
     <n-radio-group v-model:value="selectedFavoredId">
       <n-flex vertical size="large">
         <n-radio
-          v-for="favored in favoreds"
-          :key="favored.id"
-          :value="favored.id"
+          v-for="favoredItem in favoreds"
+          :key="favoredItem.id"
+          :value="favoredItem.id"
         >
-          {{ favored.title }}
+          {{ favoredItem.title }}
         </n-radio>
-        <n-radio key="deleted" value="deleted"> 取消收藏 </n-radio>
+        <n-radio key="deleted" value="deleted">取消收藏</n-radio>
       </n-flex>
     </n-radio-group>
     <template #action>

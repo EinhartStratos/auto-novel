@@ -10,6 +10,9 @@ import { downloadFile } from '@/util';
 
 import { useBookshelfLocalStore } from '@/pages/bookshelf/BookshelfLocalStore';
 import { doAction } from '@/pages/util';
+import TranslateOptions from '@/pages/novel/components/TranslateOptions.vue';
+
+const translateOptions = ref<InstanceType<typeof TranslateOptions>>();
 
 const props = defineProps<{
   type: 'gpt' | 'sakura';
@@ -59,11 +62,18 @@ const queueAllVolumes = (volumes: LocalVolumeMetadata[]) => {
 };
 
 const shouldTopJob = useKeyModifier('Control');
-const queueVolume = (volumeId: string) => {
+const queueVolume = (volumeId: string, total: number = 65536) => {
+  const { startIndex, endIndex, level, forceMetadata } =
+    translateOptions.value!.getTranslateTaskParams();
+  const taskNumber = translateOptions.value!.getTaskNumber();
   const success = store.queueJobToWorkspace(volumeId, {
-    level: 'expire',
+    level: level,
     type: props.type,
     shouldTop: shouldTopJob.value ?? false,
+    startIndex: startIndex,
+    endIndex: endIndex,
+    taskNumber: taskNumber,
+    total: total,
   });
   if (success) {
     message.success('排队成功');
@@ -117,6 +127,12 @@ const progressFilterFunc = computed(() => {
     @volume-add="queueVolume($event.name)"
   >
     <template #extra>
+      <translate-options
+        ref="translateOptions"
+        :gnid="GenericNovelId.local('')"
+        :glossary="{}"
+      />
+      <n-divider style="margin: 12px 0" />
       <c-action-wrapper title="状态">
         <c-radio-group
           v-model:value="progressFilter"
@@ -139,8 +155,9 @@ const progressFilterFunc = computed(() => {
         <n-text>{{ volume.id }}</n-text>
 
         <n-text depth="3">
-          <n-time :time="volume.createAt" type="relative" /> / 总计
-          {{ volume.toc.length }} / 完成 {{ calculateFinished(volume) }} / 过期
+          <n-time :time="volume.createAt" type="relative" />
+          / 总计 {{ volume.toc.length }} / 完成
+          {{ calculateFinished(volume) }} / 过期
           {{ calculateExpired(volume) }}
         </n-text>
 
@@ -149,7 +166,7 @@ const progressFilterFunc = computed(() => {
             label="排队"
             size="tiny"
             secondary
-            @action="queueVolume(volume.id)"
+            @action="queueVolume(volume.id, volume.toc.length)"
           />
 
           <router-link
@@ -176,19 +193,15 @@ const progressFilterFunc = computed(() => {
 
           <div style="flex: 1" />
 
-          <n-popconfirm
-            :show-icon="false"
-            @positive-click="deleteVolume(volume.id)"
-            :negative-text="null"
-            style="max-width: 300px"
-          >
-            <template #trigger>
-              <c-icon-button :icon="DeleteOutlineOutlined" type="error" />
-            </template>
-            真的要删除吗？
-            <br />
-            {{ volume.id }}
-          </n-popconfirm>
+          <c-button-confirm
+            :hint="`真的要删除《${volume.id}》吗？`"
+            :icon="DeleteOutlineOutlined"
+            size="tiny"
+            secondary
+            circle
+            type="error"
+            @action="deleteVolume(volume.id)"
+          />
         </n-flex>
       </n-flex>
     </template>

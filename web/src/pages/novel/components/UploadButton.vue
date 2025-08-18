@@ -8,59 +8,89 @@ import {
 
 import { Locator, formatError } from '@/data';
 import { useWenkuNovelStore } from '../WenkuNovelStore';
+import { RegexUtil } from '@/util';
+import { getFullContent } from '@/util/file';
 
-const { novelId, type } = defineProps<{
+const props = defineProps<{
   novelId: string;
-  type: 'jp' | 'zh';
+  allowZh: boolean;
 }>();
 
 const message = useMessage();
 
-const { isSignedIn } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 
-const store = useWenkuNovelStore(novelId);
+const store = useWenkuNovelStore(props.novelId);
 
 async function beforeUpload({ file }: { file: UploadFileInfo }) {
-  if (!isSignedIn.value) {
+  if (!whoami.value.isSignedIn) {
     message.info('请先登录');
     return false;
   }
+  if (!file.file) {
+    return false;
+  }
   if (
-    file.file &&
     ['jp', 'zh', 'zh-jp', 'jp-zh'].some((prefix) =>
-      file.file!!.name.startsWith(prefix),
+      file.file!.name.startsWith(prefix),
     )
   ) {
     message.error('不要上传本网站上生成的机翻文件');
     return false;
   }
-  if (file.file && file.file.size > 1024 * 1024 * 40) {
+  if (file.file.size > 1024 * 1024 * 40) {
     message.error('文件大小不能超过40MB');
     return false;
   }
+
+  let content: string;
+  try {
+    content = await getFullContent(file.file);
+  } catch (e) {
+    console.error(e);
+    message.error(`文件解析错误:${e}`);
+    return false;
+  }
+  const charsCount = RegexUtil.countLanguageCharacters(content);
+  if (charsCount.total < 500) {
+    message.error('字数过少，请检查内容是不是图片');
+    return false;
+  }
+
+  const p = (charsCount.jp + charsCount.ko) / charsCount.total;
+  if (p < 0.33) {
+    if (!props.allowZh) {
+      message.error('疑似中文小说，文库不允许上传');
+      return false;
+    } else {
+      file.url = 'zh';
+    }
+  } else {
+    file.url = 'jp';
+  }
 }
 
-const customRequest = ({
+const customRequest = async ({
   file,
   onFinish,
   onError,
   onProgress,
 }: UploadCustomRequestOptions) => {
-  if (!isSignedIn) {
+  if (!whoami.value.isSignedIn) {
     onError();
     return;
   }
-  store
-    .createVolume(file.name, type, file.file as File, (percent) =>
+
+  try {
+    const type = file.url === 'jp' ? 'jp' : 'zh';
+    await store.createVolume(file.name, type, file.file as File, (percent) =>
       onProgress({ percent }),
-    )
-    .then(() => {
-      onFinish();
-    })
-    .catch(async (e) => {
-      onError();
-      message.error(`上传失败:${await formatError(e)}`);
-    });
+    );
+    onFinish();
+  } catch (e) {
+    onError();
+    message.error(`上传失败:${await formatError(e)}`);
+  }
 };
 
 const ruleViewed = Locator.ruleViewedRepository().ref;
@@ -99,18 +129,16 @@ const uploadVolumes = () => {
     v-model:show="showRuleModal"
     @after-leave="uploadRef?.openOpenFileDialog()"
   >
-    <n-p> 在上传小说之前，请务必遵守以下规则。 </n-p>
+    <n-p>在上传小说之前，请务必遵守以下规则。</n-p>
     <n-ul>
-      <n-li>
-        无论是中文章节还是日文章节，都不要上传机翻，你可以上传日文文件并生成机翻。
-      </n-li>
       <n-li>
         日文章节上传前请确定里面有文本，单卷书压缩包超40MB里面大概率只有扫图无文本，这种是无法翻译的。
       </n-li>
-      <n-li>EPUB文件大小超过40MB无法上传，请压缩里面的插图。</n-li>
-      <n-li>文件名长度过长会无法上传，请删除副标题或其他附加信息。</n-li>
+      <n-li>EPUB文件大小超过40MB无法上传，请压缩里面的图片。</n-li>
+      <n-li>不要上传已存在的分卷，现存的分卷有问题请联系管理员。</n-li>
+      <n-li>分卷文件名应当只包含日文标题、卷数、分卷日文标题。</n-li>
     </n-ul>
-    <n-p> 由于文库小说还在开发中，规则也会变化，务必留意。 </n-p>
+    <n-p>由于文库小说还在开发中，规则也会变化，务必留意。</n-p>
 
     <template #action>
       <c-button label="确定" type="primary" @action="showRuleModal = false" />

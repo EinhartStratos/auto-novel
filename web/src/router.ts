@@ -17,20 +17,13 @@ const router = createRouter({
   routes: [
     {
       path: '/*',
-      component: () => import('./pages/layouts/AuthLayout.vue'),
       children: [
         {
-          path: '/sign-in',
-          name: 'sign-in',
-          meta: { title: '登录' },
-          component: () => import('./pages/auth/SignIn.vue'),
+          path: '/auth',
+          name: 'auth',
+          meta: { title: '统一身份认证' },
+          component: () => import('./pages/Auth.vue'),
           props: (route) => ({ from: route.query.from }),
-        },
-        {
-          path: '/reset-password',
-          name: 'reset-password',
-          meta: { title: '重置密码' },
-          component: () => import('./pages/auth/ResetPassword.vue'),
         },
       ],
     },
@@ -38,7 +31,7 @@ const router = createRouter({
     {
       path: '/*',
       meta: { isReader: true },
-      component: () => import('./pages/layouts/ReaderLayout.vue'),
+      component: () => import('./pages/reader/ReaderLayout.vue'),
       children: [
         {
           path: '/novel/:providerId/:novelId/:chapterId',
@@ -57,7 +50,7 @@ const router = createRouter({
 
     {
       path: '/*',
-      component: () => import('./pages/layouts/MainLayout.vue'),
+      component: () => import('./pages/MainLayout.vue'),
       children: [
         {
           path: '/',
@@ -75,6 +68,7 @@ const router = createRouter({
               component: () => import('./pages/bookshelf/BookshelfWeb.vue'),
               props: (route) => ({
                 page: Number(route.query.page) || 1,
+                query: route.query.query || '',
                 selected: parseSelected(route.query),
                 favoredId: route.params.favoredId || 'default',
               }),
@@ -192,11 +186,6 @@ const router = createRouter({
           redirect: '/workspace/sakura',
           children: [
             {
-              path: 'katakana',
-              meta: { title: '术语表工作区' },
-              component: () => import('./pages/workspace/Katakana.vue'),
-            },
-            {
               path: 'gpt',
               meta: { title: 'GPT工作区' },
               component: () => import('./pages/workspace/GptWorkspace.vue'),
@@ -210,6 +199,11 @@ const router = createRouter({
               path: 'interactive',
               meta: { title: '交互翻译' },
               component: () => import('./pages/workspace/Interactive.vue'),
+            },
+            {
+              path: 'toolbox',
+              meta: { title: '小说工具箱' },
+              component: () => import('./pages/workspace/Toolbox.vue'),
             },
           ],
         },
@@ -257,7 +251,8 @@ const router = createRouter({
 
         {
           path: '/admin',
-          component: () => import('./pages/layouts/AdminLayout.vue'),
+          redirect: '/admin/user',
+          component: () => import('./pages/admin/AdminLayout.vue'),
           children: [
             {
               path: 'user',
@@ -290,7 +285,16 @@ const router = createRouter({
     },
   ],
 
-  scrollBehavior(_to, _from, savedPosition) {
+  scrollBehavior(to, _from, savedPosition) {
+    if (to.hash) {
+      const decodedHash = encodeURIComponent(to.hash.substring(1));
+      const element = document.getElementById(decodedHash);
+      if (element) {
+        const top = element.getBoundingClientRect().top + window.scrollY - 58; // 50 是 navbar 的高度
+        setTimeout(() => window.scrollTo({ top }));
+        return { top };
+      }
+    }
     return { top: savedPosition?.top ?? 0 };
   },
 });

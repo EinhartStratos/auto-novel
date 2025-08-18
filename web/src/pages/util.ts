@@ -19,6 +19,7 @@ export const useBreakPoints = () =>
   });
 
 export const checkIsMobile = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const a = navigator.userAgent || navigator.vendor || (window as any).opera;
   if (
     /(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino/i.test(
@@ -34,7 +35,7 @@ export const checkIsMobile = () => {
 };
 
 export const doAction = (
-  promise: Promise<any>,
+  promise: Promise<unknown>,
   label: string,
   message: MessageApi,
 ) =>
@@ -45,14 +46,6 @@ export const doAction = (
     .catch(async (e) => {
       message.error(label + '失败:' + (await formatError(e)));
     });
-
-export const isDarkColor = (color: string) => {
-  const r = parseInt(color.substring(1, 3), 16);
-  const g = parseInt(color.substring(3, 5), 16);
-  const b = parseInt(color.substring(5, 7), 16);
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness < 120;
-};
 
 type KeyPredicate = (event: KeyboardEvent) => boolean;
 type KeyFilter = string | string[] | KeyPredicate;
@@ -78,4 +71,46 @@ export const onKeyDown = (
   };
   onActivated(() => document.addEventListener('keydown', listener));
   onDeactivated(() => document.removeEventListener('keydown', listener));
+};
+
+export const copyToClipBoard = async (
+  text: string,
+  parentNode?: HTMLElement | null,
+) => {
+  // 优先使用 navigator 提供的复制方法
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+
+  // 回退到传统复制方法
+  // 创建临时可编辑元素，使用div元素避免弹出输入法
+  const textEl = document.createElement('div');
+  textEl.innerText = text;
+  Object.assign(textEl.style, {
+    position: 'fixed',
+    top: '-9999px',
+    left: '-9999px',
+    opacity: '0',
+  });
+  textEl.contentEditable = 'true';
+
+  // modal 内的复制，需要一个 modal 内部的元素作为 parentNode 来储存临时文本
+  const targetNode = parentNode ?? document.body;
+  targetNode.appendChild(textEl);
+
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(textEl);
+
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    return document.execCommand('copy');
+  } finally {
+    targetNode.removeChild(textEl);
+  }
 };

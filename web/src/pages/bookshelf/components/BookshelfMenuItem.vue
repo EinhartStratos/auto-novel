@@ -18,13 +18,21 @@ const store = useBookshelfLocalStore();
 
 const message = useMessage();
 
-const options =
-  id === 'default'
-    ? [{ label: '编辑信息', key: 'edit' }]
-    : [
-        { label: '编辑信息', key: 'edit' },
-        { label: '删除', key: 'delete' },
-      ];
+const getOptions = () => {
+  if (id === 'all') {
+    return [];
+  } else if (id === 'default') {
+    return [{ label: '编辑信息', key: 'edit' }];
+  } else {
+    return [
+      { label: '编辑信息', key: 'edit' },
+      { label: '删除', key: 'delete' },
+    ];
+  }
+};
+
+const options = getOptions();
+
 const onSelect = (key: string) => {
   if (key === 'edit') {
     showEditModal.value = true;
@@ -94,6 +102,7 @@ const deleteFavored = () =>
     <n-flex align="center" justify="space-between">
       {{ title }}
       <n-dropdown
+        v-if="options.length > 0"
         trigger="hover"
         :options="options"
         :keyboard="false"
@@ -134,7 +143,7 @@ const deleteFavored = () =>
   </c-modal>
 
   <c-modal v-model:show="showDeleteModal" title="删除收藏夹">
-    确定删除收藏夹<{{ title }}>吗？
+    确定删除收藏夹[{{ title }}]吗？
     <n-text v-if="type === 'local'">
       <br />
       注意，删除本地收藏夹的同时也会清空收藏夹内所有小说。

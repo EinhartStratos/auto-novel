@@ -2,16 +2,14 @@ package api
 
 import api.model.WebNovelOutlineDto
 import api.model.asDto
-import api.plugins.authenticateDb
-import api.plugins.isOldAss
-import api.plugins.user
-import api.plugins.userOrNull
+import api.plugins.*
 import infra.common.*
 import infra.oplog.Operation
 import infra.oplog.OperationHistoryRepository
-import infra.user.User
 import infra.user.UserFavoredRepository
 import infra.web.*
+import infra.web.datasource.providers.Hameln
+import infra.web.datasource.providers.Kakuyomu
 import infra.web.datasource.providers.NovelIdShouldBeReplacedException
 import infra.web.datasource.providers.Syosetu
 import infra.web.repository.*
@@ -19,7 +17,6 @@ import infra.wenku.repository.WenkuNovelMetadataRepository
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.resources.*
-import io.ktor.server.application.*
 import io.ktor.server.plugins.*
 import io.ktor.server.plugins.cachingheaders.*
 import io.ktor.server.request.*
@@ -267,7 +264,7 @@ fun Route.routeWebNovel() {
                 type = loc.type,
             )
             val encodedFilename = loc.filename.encodeURLParameter(spaceToPlus = true)
-            "../../../../../../../files-web/${path}?filename=${encodedFilename}"
+            "/files-temp/web/${path.encodeURLParameter()}?filename=${encodedFilename}"
         }
     }
 }
@@ -275,9 +272,35 @@ fun Route.routeWebNovel() {
 private fun throwNovelNotFound(): Nothing =
     throwNotFound("小说不存在")
 
+private val disgustingFascistNovelList = mapOf(
+    Syosetu.id to listOf(
+        "n0646ie",
+        "n8926ic",
+        "n4583he",
+        "n6465co",
+    ),
+    Kakuyomu.id to listOf(
+        "16816927860373250234",
+        "16817330660019717771",
+        "1177354054901629921",
+        "16818093082836701336",
+        "16817330661737648260",
+        "16818622170290655590",
+    ),
+    Hameln.id to listOf(
+        "291561",
+        "1472",
+    ),
+)
+
 private fun validateId(providerId: String, novelId: String) {
     if (providerId == Syosetu.id && novelId != novelId.lowercase()) {
         throw BadRequestException("成为小说家id应当小写")
+    }
+    disgustingFascistNovelList.get(providerId)?.let {
+        if (novelId in it) {
+            throw BadRequestException("该小说包含法西斯内容，不予显示")
+        }
     }
 }
 
@@ -504,6 +527,8 @@ class WebNovelApi(
         wenkuId: String,
         toc: Map<String, String>,
     ) {
+        user.shouldBeOldAss()
+
         if (wenkuId.isNotBlank() && wenkuMetadataRepo.get(wenkuId) == null) {
             throwNotFound("文库版不存在")
         }
@@ -536,10 +561,11 @@ class WebNovelApi(
                 wenkuId = wenkuId.takeIf { it.isNotBlank() },
             )
             val webId = "${providerId}/${novelId}"
+            if (originWenkuId != null) {
+                wenkuMetadataRepo.removeWebId(originWenkuId, webId)
+            }
             if (targetWenkuId != null) {
                 wenkuMetadataRepo.addWebId(targetWenkuId, webId)
-            } else {
-                wenkuMetadataRepo.removeWebId(originWenkuId!!, webId)
             }
         }
 
@@ -575,6 +601,7 @@ class WebNovelApi(
         novelId: String,
         glossary: Map<String, String>,
     ) {
+        user.shouldBeOldAss()
         val novel = metadataRepo.get(providerId, novelId)
             ?: throwNovelNotFound()
         if (novel.glossary == glossary)

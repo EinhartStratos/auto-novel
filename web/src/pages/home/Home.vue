@@ -12,7 +12,6 @@ import { WebNovelRepository, WenkuNovelRepository } from '@/data/api';
 import bannerUrl from '@/image/banner.webp';
 import { WebNovelOutlineDto } from '@/model/WebNovel';
 import { WenkuNovelOutlineDto } from '@/model/WenkuNovel';
-import { notice } from '@/pages/components/NoticeBoard.vue';
 import { useBreakPoints } from '@/pages/util';
 import { Result, runCatching } from '@/util/result';
 import { WebUtil } from '@/util/web';
@@ -23,7 +22,7 @@ const showShortcut = bp.smaller('tablet');
 const router = useRouter();
 const vars = useThemeVars();
 
-const { isSignedIn } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 
 const url = ref('');
 const query = (url: string) => {
@@ -44,12 +43,25 @@ const loadFavorite = async () => {
       .listFavoredWebNovel('default', {
         page: 0,
         pageSize: 8,
+        query: '',
+        provider: 'kakuyomu,syosetu,novelup,hameln,pixiv,alphapolis',
+        type: 0,
+        level: 0,
+        translate: 0,
         sort: 'update',
       })
       .then((it) => it.items),
   );
 };
-loadFavorite();
+watch(
+  () => whoami.value.isSignedIn,
+  (isSignedIn) => {
+    if (isSignedIn) {
+      loadFavorite();
+    }
+  },
+  { immediate: true },
+);
 
 const mostVisitedWeb = ref<Result<WebNovelOutlineDto[]>>();
 const loadWeb = async () => {
@@ -98,18 +110,7 @@ const qqLink =
   'http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=Qa0SOMBYZoJZ4vuykz3MbPS0zbpeN0pW&authKey=q75E7fr5CIBSDhqX%2F4kuC%2B0mcPiDvj%2FSDfP%2FGZ8Rl8kDn6Z3M6XPSZ91yt4ZWonq&noverify=0&group_code=819513328';
 
 const telegramLink = 'https://t.me/+Mphy0wV4LYZkNTI1';
-const githubLink = 'https://github.com/FishHawk/auto-novel';
-
-const notices = [
-  notice(
-    '如果发现Sakura某段翻译得不准确，可以提交错误，给网站收集数据帮助sakura训练。',
-  ),
-  notice(
-    '禁止使用脚本绕过翻译器提交翻译文本，哪怕你提交的是正经翻译。现在所有翻译功能都需要登录才可使用。',
-  ),
-  notice('因为种种原因，文库小说不再允许上传中文小说。'),
-  notice('本地小说的百度/有道翻译请到【我的收藏->本地小说】里面进行。'),
-];
+const githubLink = 'https://github.com/auto-novel/auto-novel';
 </script>
 
 <template>
@@ -153,7 +154,7 @@ const notices = [
       style="margin: 8px 0px"
     >
       <router-link
-        :to="isSignedIn ? '/favorite/web' : '/favorite/local'"
+        :to="whoami.isSignedIn ? '/favorite/web' : '/favorite/local'"
         style="flex: 1"
       >
         <n-button quaternary style="width: 100%; height: 64px">
@@ -193,7 +194,8 @@ const notices = [
     </n-flex>
     <div v-else style="height: 16px" />
 
-    <notice-board :notices="notices">
+    <bulletin>
+      <Migrate />
       <n-flex>
         <n-button text type="primary" @click="showHowToUseModal = true">
           使用说明
@@ -207,9 +209,15 @@ const notices = [
         /
         <n-a :href="githubLink" target="_blank">Github</n-a>
       </n-flex>
-    </notice-board>
+      <n-p>
+        禁止使用脚本绕过翻译器提交翻译文本，哪怕你觉得自己提交的是正经翻译。
+      </n-p>
+      <n-p>
+        FishHawk长期996,网站开发速度大幅下降已成常态，论坛反馈目前没有精力维护，有问题加群@吧
+      </n-p>
+    </bulletin>
 
-    <template v-if="isSignedIn">
+    <template v-if="whoami.isSignedIn">
       <section-header title="我的收藏">
         <router-link to="/favorite/web">
           <c-button label="更多" :icon="ReadMoreOutlined" />
@@ -244,10 +252,11 @@ const notices = [
       <c-a to="/forum">论坛</c-a>
       中发帖讨论。
     </n-p>
-    <n-p> 支持的小说站如下: </n-p>
-    <n-p v-for="[name, link] of linkExample">
+    <n-p>支持的小说站如下:</n-p>
+    <n-p v-for="[name, link] of linkExample" :key="name">
       <b>{{ name }}</b>
       <br />
+      <!-- eslint-disable-next-line vue/no-v-html -->
       <span v-html="link" />
     </n-p>
   </c-modal>

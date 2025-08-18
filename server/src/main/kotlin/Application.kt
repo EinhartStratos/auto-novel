@@ -6,12 +6,10 @@ import infra.*
 import infra.article.ArticleRepository
 import infra.comment.CommentRepository
 import infra.oplog.OperationHistoryRepository
-import infra.sakura.SakuraFeedbackRepository
 import infra.web.repository.WebNovelFavoredRepository
 import infra.wenku.repository.WenkuNovelFavoredRepository
 import infra.web.repository.WebNovelReadHistoryRepository
 import infra.user.UserRepository
-import infra.user.UserCodeRepository
 import infra.user.UserFavoredRepository
 import infra.web.datasource.WebNovelHttpDataSource
 import infra.web.repository.WebNovelChapterRepository
@@ -27,7 +25,7 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.cachingheaders.*
-import io.ktor.server.plugins.callloging.*
+import io.ktor.server.plugins.calllogging.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.resources.*
@@ -38,13 +36,26 @@ import org.koin.dsl.module
 import org.koin.ktor.plugin.Koin
 import org.koin.logger.slf4jLogger
 
+private fun env(name: String): String? =
+    System.getenv(name)
+
+private fun envNotNull(name: String): String =
+    System.getenv(name) ?: ""
+
+private fun envDbHost(name: String) =
+    env(name) ?: env("DB_HOST_TEST") ?: "localhost"
+
+private fun envDbPort(name: String) =
+    env(name)?.toIntOrNull()
+
+
 fun main() {
     embeddedServer(Netty, 8081) {
         install(Koin) {
             slf4jLogger()
             modules(appModule)
         }
-        authentication(secret = System.getenv("JWT_SECRET")!!)
+        authentication(secret = envNotNull("JWT_SECRET"))
         rateLimit()
         install(Resources)
         install(CachingHeaders)
@@ -67,12 +78,9 @@ fun main() {
         }
 
         routing {
-            routeAuth()
             routeArticle()
             routeComment()
             routeOperationHistory()
-            //
-            routeSakura()
             //
             routeUser()
             routeUserFavoredWeb()
@@ -87,15 +95,6 @@ fun main() {
 
 val appModule = module {
     // Data layer: Client
-    fun env(name: String): String? =
-        System.getenv(name)
-
-    fun envDbHost(name: String) =
-        env(name) ?: env("DB_HOST_TEST") ?: "localhost"
-
-    fun envDbPort(name: String) =
-        env(name)?.toIntOrNull()
-
     single {
         MongoClient(
             host = envDbHost("DB_HOST_MONGO"),
@@ -114,12 +113,14 @@ val appModule = module {
             port = envDbPort("DB_PORT_REDIS"),
         )
     }
+    singleOf(::TempFileClient)
 
     // Data layer: Data Source
     singleOf(::WebNovelEsDataSource)
     single {
         WebNovelHttpDataSource(
             httpsProxy = env("HTTPS_PROXY"),
+            hamelnToken = env("HAMELN_TOKEN"),
             pixivPhpsessid = env("PIXIV_COOKIE_PHPSESSID"),
         )
     }
@@ -131,12 +132,9 @@ val appModule = module {
     singleOf(::ArticleRepository)
     singleOf(::CommentRepository)
     singleOf(::OperationHistoryRepository)
-    singleOf(::SakuraFeedbackRepository)
 
     singleOf(::UserRepository)
-    singleOf(::UserCodeRepository)
     singleOf(::UserFavoredRepository)
-
     singleOf(::WebNovelMetadataRepository)
     singleOf(::WebNovelChapterRepository)
     singleOf(::WebNovelFileRepository)
@@ -148,14 +146,9 @@ val appModule = module {
     singleOf(::WenkuNovelFavoredRepository)
 
     // App Layer
-    single {
-        AuthApi(secret = env("JWT_SECRET")!!, get(), get())
-    }
     singleOf(::ArticleApi)
     singleOf(::CommentApi)
     singleOf(::OperationHistoryApi)
-
-    singleOf(::SakuraApi)
 
     singleOf(::UserApi)
     singleOf(::UserFavoredWebApi)

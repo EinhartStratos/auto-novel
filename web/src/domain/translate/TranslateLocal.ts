@@ -10,7 +10,7 @@ import { Translator } from './Translator';
 
 export const translateLocal = async (
   { volumeId }: LocalTranslateTaskDesc,
-  { level }: TranslateTaskParams,
+  { level, startIndex, endIndex }: TranslateTaskParams,
   callback: TranslateTaskCallback,
   translator: Translator,
   signal?: AbortSignal,
@@ -40,16 +40,17 @@ export const translateLocal = async (
     } else {
       metadata = metadataOrUndefined;
     }
-  } catch (e: any) {
+  } catch (e: unknown) {
     callback.log(`发生错误，结束翻译任务：${e}`);
     return;
   }
 
   const chapters = (() => {
     if (level === 'all') {
-      return metadata.toc.map((it) => it.chapterId);
+      return metadata.toc.slice(startIndex, endIndex).map((it) => it.chapterId);
     } else {
       const untranslatedChapters = metadata.toc
+        .slice(startIndex, endIndex)
         .filter((it) => it[translator.id] === undefined)
         .map((it) => it.chapterId);
       if (level === 'normal') {
@@ -57,6 +58,7 @@ export const translateLocal = async (
       }
 
       const expiredChapters = metadata.toc
+        .slice(startIndex, endIndex)
         .filter(
           (it) =>
             it[translator.id] !== undefined &&
@@ -82,8 +84,16 @@ export const translateLocal = async (
       }
       const textsJp = chapter?.paragraphs;
 
+      const oldTextsZh = await localVolumeRepository.getChapter(
+        volumeId,
+        chapterId,
+      );
       const textsZh = await translator.translate(textsJp, {
         glossary: metadata.glossary,
+        oldGlossary: chapter[translator.id]?.glossary,
+        oldTextZh: oldTextsZh
+          ? oldTextsZh[translator.id]?.paragraphs
+          : undefined,
         force: forceSeg,
         signal,
       });
@@ -95,11 +105,11 @@ export const translateLocal = async (
         paragraphs: textsZh,
       });
       callback.onChapterSuccess({ zh: state });
-    } catch (e: any) {
+    } catch (e) {
       if (e === 'quit') {
         callback.log(`发生错误，结束翻译任务`);
         return;
-      } else if (e.name === 'AbortError') {
+      } else if (e instanceof DOMException && e.name === 'AbortError') {
         callback.log(`中止翻译任务`);
         return 'abort';
       } else {

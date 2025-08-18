@@ -1,36 +1,59 @@
-const readContent = async (file: File) => {
-  const buffer = await file.arrayBuffer();
+import { BaseFile } from './base';
 
-  const tryDecode = async (label: string) => {
-    const decoder = new TextDecoder(label, { fatal: true });
-    try {
-      const decoded = decoder.decode(buffer);
-      return decoded;
-    } catch (e) {
-      if (e instanceof TypeError) return undefined;
-      throw e;
+export class Txt extends BaseFile {
+  type = 'txt' as const;
+  text: string = '';
+
+  private async parseFile(file: File) {
+    const buffer = await file.arrayBuffer();
+
+    const tryDecode = async (label: string) => {
+      const decoder = new TextDecoder(label, { fatal: true });
+      try {
+        const decoded = decoder.decode(buffer);
+        return decoded;
+      } catch (e) {
+        if (e instanceof TypeError) return undefined;
+        throw e;
+      }
+    };
+
+    let text: string | undefined;
+    for (const label of ['utf-8', 'gbk']) {
+      text = await tryDecode(label);
+      if (text !== undefined) break;
     }
-  };
+    if (text === undefined) {
+      throw '未知编码';
+    }
 
-  let content: string | undefined;
-  for (const label of ['utf-8', 'gbk']) {
-    content = await tryDecode(label);
-    if (content !== undefined) break;
+    // 修复换行符格式
+    text = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+
+    this.text = text;
   }
-  if (content === undefined) {
-    throw '未知编码';
+
+  static async fromFile(file: File) {
+    const txt = new Txt(file.name, file);
+    await txt.parseFile(file);
+    return txt;
   }
 
-  return content;
-};
+  static async fromText(name: string, text: string) {
+    const txt = new Txt(name);
+    txt.text = text;
+    return txt;
+  }
 
-const writeContent = (lines: string[]) => {
-  return new Blob([lines.join('\n')], {
-    type: 'text/plain',
-  });
-};
+  async clone() {
+    if (!this.rawFile)
+      throw new Error('Cannot clone manually constructed file.');
+    return Txt.fromFile(this.rawFile);
+  }
 
-export const Txt = {
-  readContent,
-  writeContent,
-};
+  async toBlob() {
+    return new Blob([this.text], {
+      type: 'text/plain',
+    });
+  }
+}

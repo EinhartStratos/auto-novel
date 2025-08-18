@@ -22,7 +22,7 @@ const message = useMessage();
 const vars = useThemeVars();
 
 const { setting } = Locator.settingRepository();
-const { isSignedIn, atLeastMaintainer } = Locator.authRepository();
+const { whoami } = Locator.authRepository();
 
 const store = useWenkuNovelStore(novelId);
 const { novelResult } = storeToRefs(store);
@@ -50,7 +50,7 @@ const showWebNovelsModal = ref(false);
         {{ label }}
       </n-tag>
       <n-flex :size="[4, 4]">
-        <router-link v-for="tag of tags" :to="buildSearchLink(tag)">
+        <router-link v-for="tag of tags" :key="tag" :to="buildSearchLink(tag)">
           <novel-tag :tag="tag" />
         </router-link>
       </n-flex>
@@ -92,7 +92,7 @@ const showWebNovelsModal = ref(false);
               style="border-radius: 2px"
             />
           </div>
-          <n-flex vertical>
+          <n-flex vertical style="min-width: 0">
             <n-h2
               prefix="bar"
               style="margin: 8px 0"
@@ -108,7 +108,7 @@ const showWebNovelsModal = ref(false);
             </n-h2>
 
             <ReuseTagGroup label="作者" :tags="novelResult.value.authors" />
-            <ReuseTagGroup label="插图" :tags="novelResult.value.artists" />
+            <ReuseTagGroup label="画师" :tags="novelResult.value.artists" />
             <ReuseTagGroup
               label="出版"
               :tags="[
@@ -125,7 +125,10 @@ const showWebNovelsModal = ref(false);
   <div class="layout-content">
     <c-result :result="novelResult" v-slot="{ value: metadata }">
       <n-flex>
-        <router-link :to="`/wenku-edit/${novelId}`">
+        <router-link
+          v-if="whoami.allowAdvancedFeatures"
+          :to="`/wenku-edit/${novelId}`"
+        >
           <c-button label="编辑" :icon="EditNoteOutlined" />
         </router-link>
 
@@ -147,7 +150,7 @@ const showWebNovelsModal = ref(false);
           :extra-height="100"
         >
           <n-ul>
-            <n-li v-for="webId of metadata.webIds">
+            <n-li v-for="webId of metadata.webIds" :key="webId">
               <c-a :to="`/novel/${webId}`">
                 {{ webId }}
               </c-a>
@@ -161,11 +164,13 @@ const showWebNovelsModal = ref(false);
         最新出版于
         <n-time :time="metadata.latestPublishAt * 1000" type="date" />
       </n-p>
+      <!-- eslint-disable-next-line vue/no-v-html -->
       <n-p v-html="metadata.introduction.replace(/\n/g, '<br />')" />
 
       <n-flex :size="[4, 4]">
         <router-link
           v-for="keyword of metadata.keywords"
+          :key="keyword"
           :to="`/wenku?query=${keyword}\$`"
         >
           <novel-tag :tag="keyword" />
@@ -178,6 +183,7 @@ const showWebNovelsModal = ref(false);
             <n-flex :size="4" :wrap="false" style="margin-bottom: 16px">
               <n-image
                 v-for="volume of metadata.volumes"
+                :key="volume.asin"
                 width="104"
                 :src="volume.cover"
                 :preview-src="volume.coverHires ?? volume.cover"
@@ -191,8 +197,8 @@ const showWebNovelsModal = ref(false);
       </template>
 
       <section-header title="目录" />
-      <template v-if="isSignedIn">
-        <upload-button type="jp" :novel-id="novelId" />
+      <template v-if="whoami.isSignedIn">
+        <upload-button :allow-zh="whoami.isAdmin" :novel-id="novelId" />
 
         <translate-options
           ref="translateOptions"
@@ -210,48 +216,60 @@ const showWebNovelsModal = ref(false);
             <WenkuVolume
               :novel-id="novelId"
               :volume="volume"
-              :get-params="() => translateOptions!!.getTranslateTaskParams()"
+              :get-params="() => translateOptions!.getTranslateTaskParams()"
               @delete="deleteVolume(volume.volumeId)"
             />
           </n-list-item>
         </n-list>
 
-        <section-header title="中文" />
-        <upload-button v-if="atLeastMaintainer" type="zh" :novel-id="novelId" />
-        <n-ul>
-          <n-li v-for="volumeId in metadata.volumeZh" :key="volumeId">
-            <n-a
-              :href="`/files-wenku/${novelId}/${encodeURIComponent(volumeId)}`"
-              target="_blank"
-              :download="volumeId"
-            >
-              {{ volumeId }}
-            </n-a>
+        <template v-if="whoami.isAdmin">
+          <n-divider style="margin: 0" />
 
-            <n-popconfirm
-              v-if="atLeastMaintainer"
-              :show-icon="false"
-              @positive-click="deleteVolume(volumeId)"
-              :negative-text="null"
-              style="max-width: 300px"
-            >
-              <template #trigger>
-                <n-button text type="error" style="margin-left: 16px">
-                  删除
-                </n-button>
-              </template>
-              真的要删除吗？
-              <br />
-              {{ volumeId }}
-            </n-popconfirm>
-          </n-li>
-        </n-ul>
+          <n-ul>
+            <n-li v-for="volumeId in metadata.volumeZh" :key="volumeId">
+              <n-a
+                :href="`/files-wenku/${novelId}/${encodeURIComponent(volumeId)}`"
+                target="_blank"
+                :download="volumeId"
+              >
+                {{ volumeId }}
+              </n-a>
+
+              <c-button-confirm
+                v-if="whoami.asAdmin"
+                :hint="`真的要删除《${volumeId}》吗？`"
+                label="删除"
+                text
+                type="error"
+                style="margin-left: 16px"
+                @action="deleteVolume(volumeId)"
+              />
+            </n-li>
+          </n-ul>
+        </template>
+
+        <n-empty
+          v-if="
+            metadata.volumeJp.length === 0 && metadata.volumeZh.length === 0
+          "
+          description="请不要创建一个空页面"
+        />
+
+        <n-empty
+          v-if="
+            !whoami.isAdmin &&
+            metadata.volumeJp.length === 0 &&
+            metadata.volumeZh.length > 0
+          "
+          description="网站已撤下中文小说板块，请上传日文生成翻译"
+        />
       </template>
       <n-p v-else>游客无法查看内容，请先登录。</n-p>
 
       <comment-list
         v-if="!setting.hideCommmentWenkuNovel"
         :site="`wenku-${novelId}`"
+        :locked="false"
       />
     </c-result>
   </div>

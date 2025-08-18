@@ -1,5 +1,9 @@
 <script lang="ts" setup>
-import { DeleteOutlineOutlined, PlusOutlined } from '@vicons/material';
+import {
+  BookOutlined,
+  DeleteOutlineOutlined,
+  PlusOutlined,
+} from '@vicons/material';
 import { VueDraggable } from 'vue-draggable-plus';
 
 import { Locator } from '@/data';
@@ -7,10 +11,9 @@ import { SakuraTranslator } from '@/domain/translate';
 import { TranslateJob } from '@/model/Translator';
 import SoundAllTaskCompleted from '@/sound/all_task_completed.mp3';
 
-import { doAction, useIsWideScreen } from '@/pages/util';
+import { doAction } from '@/pages/util';
 
 const message = useMessage();
-const isWideScreen = useIsWideScreen();
 
 const { setting } = Locator.settingRepository();
 
@@ -18,6 +21,7 @@ const workspace = Locator.sakuraWorkspaceRepository();
 const workspaceRef = workspace.ref;
 
 const showCreateWorkerModal = ref(false);
+const showLocalVolumeDrawer = ref(false);
 
 type ProcessedJob = TranslateJob & {
   progress?: { finished: number; error: number; total: number };
@@ -61,15 +65,15 @@ const onProgressUpdated = (
     | { state: 'processed'; finished: number; error: number; total: number },
 ) => {
   if (state.state === 'finish') {
-    const job = processedJobs.value.get(task)!!;
+    const job = processedJobs.value.get(task)!;
     processedJobs.value.delete(task);
     if (!state.abort) {
       job.finishAt = Date.now();
-      workspace.addJobRecord(job as any);
+      workspace.addJobRecord(job as TranslateJob);
       workspace.deleteJob(task);
     }
   } else {
-    const job = processedJobs.value.get(task)!!;
+    const job = processedJobs.value.get(task)!;
     job.progress = {
       finished: state.finished,
       error: state.error,
@@ -89,14 +93,10 @@ const clearCache = async () =>
 </script>
 
 <template>
-  <c-layout
-    :sidebar="isWideScreen && !setting.hideLocalVolumeListInWorkspace"
-    :sidebar-width="320"
-    class="layout-content"
-  >
+  <div class="layout-content">
     <n-h1>Sakura工作区</n-h1>
 
-    <notice-board :notices="[]">
+    <bulletin>
       <n-flex>
         <c-a to="/forum/656d60530286f15e3384fcf8" target="_blank">
           本地部署教程
@@ -114,35 +114,25 @@ const clearCache = async () =>
             控制台
           </n-a>
         </span>
-        /
-        <span>
-          <c-a to="/forum/6630f091c92d3f7ad7f50f23" target="_blank">
-            Kaggle教程
-          </c-a>
-          :
-          <n-a
-            href="https://kaggle.com/kernels/welcome?src=https://github.com/FishHawk/auto-novel/blob/main/sakura-launcher/kaggle.ipynb"
-            target="_blank"
-          >
-            脚本
-          </n-a>
-        </span>
       </n-flex>
 
-      <n-p> 允许上传的模型如下，禁止一切试图突破上传检查的操作。 </n-p>
+      <n-p>允许上传的模型如下，禁止一切试图突破上传检查的操作。</n-p>
       <n-ul>
-        <n-li v-for="{ repo, model } of SakuraTranslator.allowModels">
+        <n-li
+          v-for="({ repo }, model) in SakuraTranslator.allowModels"
+          :key="model"
+        >
           [
           <n-a
             target="_blank"
-            :href="`https://huggingface.co/${repo}/blob/main/${model}`"
+            :href="`https://huggingface.co/${repo}/blob/main/${model}.gguf`"
           >
             HF
           </n-a>
           /
           <n-a
             target="_blank"
-            :href="`https://hf-mirror.com/${repo}/blob/main/${model}`"
+            :href="`https://hf-mirror.com/${repo}/blob/main/${model}.gguf`"
           >
             国内镜像
           </n-a>
@@ -150,7 +140,7 @@ const clearCache = async () =>
           {{ model }}
         </n-li>
       </n-ul>
-    </notice-board>
+    </bulletin>
 
     <section-header title="翻译器">
       <c-button
@@ -158,18 +148,12 @@ const clearCache = async () =>
         :icon="PlusOutlined"
         @action="showCreateWorkerModal = true"
       />
-
-      <n-popconfirm
-        :show-icon="false"
-        @positive-click="clearCache"
-        :negative-text="null"
-        style="max-width: 300px"
-      >
-        <template #trigger>
-          <c-button label="清空缓存" :icon="DeleteOutlineOutlined" />
-        </template>
-        真的要清空缓存吗？
-      </n-popconfirm>
+      <c-button-confirm
+        hint="真的要清空缓存吗？"
+        label="清空缓存"
+        :icon="DeleteOutlineOutlined"
+        @action="clearCache"
+      />
     </section-header>
 
     <n-empty
@@ -182,7 +166,7 @@ const clearCache = async () =>
         :animation="150"
         handle=".drag-trigger"
       >
-        <n-list-item v-for="worker of workspaceRef.workers">
+        <n-list-item v-for="worker of workspaceRef.workers" :key="worker.id">
           <job-worker
             :worker="{ translatorId: 'sakura', ...worker }"
             :get-next-job="getNextJob"
@@ -193,17 +177,17 @@ const clearCache = async () =>
     </n-list>
 
     <section-header title="任务队列">
-      <n-popconfirm
-        :show-icon="false"
-        @positive-click="deleteAllJobs"
-        :negative-text="null"
-        style="max-width: 300px"
-      >
-        <template #trigger>
-          <c-button label="清空队列" :icon="DeleteOutlineOutlined" />
-        </template>
-        真的要清空队列吗？
-      </n-popconfirm>
+      <c-button
+        label="本地书架"
+        :icon="BookOutlined"
+        @action="showLocalVolumeDrawer = true"
+      />
+      <c-button-confirm
+        hint="真的要清空队列吗？"
+        label="清空队列"
+        :icon="DeleteOutlineOutlined"
+        @action="deleteAllJobs"
+      />
     </section-header>
     <n-empty v-if="workspaceRef.jobs.length === 0" description="没有任务" />
     <n-list>
@@ -225,11 +209,12 @@ const clearCache = async () =>
     </n-list>
 
     <job-record-section id="sakura" />
+  </div>
 
-    <template #sidebar>
-      <local-volume-list-specific-translation type="sakura" />
-    </template>
-  </c-layout>
+  <local-volume-list-specific-translation
+    v-model:show="showLocalVolumeDrawer"
+    type="sakura"
+  />
 
   <sakura-worker-modal v-model:show="showCreateWorkerModal" />
 </template>

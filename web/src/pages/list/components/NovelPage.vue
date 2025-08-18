@@ -1,10 +1,12 @@
 <script lang="ts" setup generic="T extends any">
 import { SyncAltOutlined } from '@vicons/material';
 
+import { Locator } from '@/data';
 import { Page } from '@/model/Page';
 import { Result } from '@/util/result';
+import { RegexUtil } from '@/util';
 
-export type Loader<T extends any> = (
+export type Loader<T> = (
   page: number,
   query: string,
   selected: number[],
@@ -22,13 +24,42 @@ const props = defineProps<{
 const route = useRoute();
 const router = useRouter();
 
+const processQueryWithLocaleAware = (input: string): string => {
+  const cc = Locator.settingRepository().cc;
+  const queries = input.split(/( |\||\+|\-|\")/);
+  const result: string[] = [];
+  for (const query of queries) {
+    if (
+      !query.includes('$') &&
+      !RegexUtil.hasKanaChars(query) &&
+      !RegexUtil.hasHangulChars(query) &&
+      RegexUtil.hasHanzi(query)
+    ) {
+      const queryData = cc.value.toData(query);
+      if (queryData === query) {
+        result.push(query);
+      } else {
+        result.push(`(${[query, queryData].join('|')})`);
+      }
+    } else {
+      result.push(query);
+    }
+  }
+  return result.join('');
+};
+
 const loader = computed(() => {
   const loaderOut = props.loader;
-  const query = props.query ?? '';
+
+  let query = (props.query ?? '').trim();
+  const setting = Locator.settingRepository().setting;
+  if (setting.value.searchLocaleAware) {
+    query = processQueryWithLocaleAware(query);
+  }
   const selected = selectedWithDefault.value;
 
   return (page: number) => {
-    return loaderOut(page, query ?? '', selected);
+    return loaderOut(page, query, selected);
   };
 });
 
@@ -134,6 +165,7 @@ const invertSelection = (optionIndex: number) => {
     </c-action-wrapper>
     <c-action-wrapper
       v-for="(option, optionIndex) in options"
+      :key="option.label"
       :title="option.label"
       align="baseline"
       size="large"
@@ -141,6 +173,7 @@ const invertSelection = (optionIndex: number) => {
       <n-flex :size="[16, 4]">
         <n-text
           v-for="(tag, index) in option.tags"
+          :key="tag"
           text
           :type="
             isSelected(optionIndex, index, option.multiple)

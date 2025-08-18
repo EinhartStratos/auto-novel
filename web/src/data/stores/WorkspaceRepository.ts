@@ -1,11 +1,12 @@
-import { useLocalStorage } from '@vueuse/core';
-
 import {
   GptWorker,
   SakuraWorker,
   TranslateJob,
   TranslateJobRecord,
 } from '@/model/Translator';
+import { useLocalStorage } from '@/util';
+
+import { LSKey } from '../LocalStorage';
 
 interface Workspace<T> {
   workers: T[];
@@ -30,7 +31,7 @@ const createWorkspaceRepository = <W extends GptWorker | SakuraWorker>(
   }
 
   const addWorker = (worker: W) => {
-    ref.value.workers.push(worker as any);
+    ref.value.workers.push(worker);
   };
   const deleteWorker = (id: string) => {
     ref.value.workers = ref.value.workers.filter((w) => w.id !== id);
@@ -118,9 +119,9 @@ const createWorkspaceRepository = <W extends GptWorker | SakuraWorker>(
 };
 
 export const createGptWorkspaceRepository = () =>
-  createWorkspaceRepository<GptWorker>('gpt-workspace', [], (workspace) => {
+  createWorkspaceRepository<GptWorker>(LSKey.WorkspaceGpt, [], (workspace) => {
     // 2024-3-8
-    workspace.value.workers.forEach((it) => {
+    workspace.value.workers.forEach((it: GptWorker) => {
       if (it.endpoint.length === 0) {
         if (it.type === 'web') {
           it.endpoint = 'https://chat.openai.com/backend-api';
@@ -140,19 +141,34 @@ export const createGptWorkspaceRepository = () =>
 
 export const createSakuraWorkspaceRepository = () =>
   createWorkspaceRepository<SakuraWorker>(
-    'sakura-workspace',
+    LSKey.WorkspaceSakura,
     [
+      { id: '共享', endpoint: 'https://sakura-share.one' },
       { id: '本机', endpoint: 'http://127.0.0.1:8080' },
       { id: 'AutoDL', endpoint: 'http://127.0.0.1:6006' },
     ],
     (workspace) => {
       // 2024-5-14
-      workspace.value.workers.forEach((it: any) => {
-        it.testContext = undefined;
-        if (typeof it.testSegLength === 'number') {
+      workspace.value.workers.forEach((it: SakuraWorker) => {
+        if ('testContext' in it) {
+          it.testContext = undefined;
+        }
+        if ('testSegLength' in it && typeof it.testSegLength === 'number') {
           it.segLength = it.testSegLength;
           it.testSegLength = undefined;
         }
       });
+
+      // 2025-2-21
+      if (
+        workspace.value.workers.find(
+          (it) => it.endpoint === 'https://sakura-share.one',
+        ) === undefined
+      ) {
+        workspace.value.workers.unshift({
+          id: '共享',
+          endpoint: 'https://sakura-share.one',
+        });
+      }
     },
   );
